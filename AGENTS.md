@@ -6,7 +6,7 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 
 ## Hard rules
 
-- **Never name any company, product or employer** anywhere in the repo (code, comments, docs, test data, commit messages).
+- **Never name any company, product or employer** anywhere in the repo (code, comments, docs, test data, commit messages). The one exception is `docs/related-work.md`, which may name third-party companies, products and projects when citing them as related work. Never name the owner's employer, even there.
 - **Verify every Gurobi API against the official docs before using it, and cite the URL** (in the commit/PR or the docstring, wherever it's useful). Don't plan around method names, `where` constants or `cbGet` keys from memory. A wrong `where`/`what` pair raises at runtime.
 - If something can't be verified, say so. Never present a guess as fact.
 - **No performance claims or benchmark numbers that haven't been measured.** Any timing reported must come from a real run, with the machine and solver settings stated.
@@ -19,6 +19,7 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 - `uv` for dependencies and for running everything. Never `pip install`.
 - Python 3.12+. Type hints on all function signatures.
 - Flat package layout. No sub-packages unless a file exceeds ~500 lines.
+- Project docs live in `docs/`: `related-work.md` for existing projects and literature, plus design docs and implementation plans as they're written.
 - MIT licence.
 
 ## How to write code
