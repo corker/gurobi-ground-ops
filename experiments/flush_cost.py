@@ -25,7 +25,9 @@ def main() -> None:
     for _ in range(max(CHECKPOINTS)):
         start = time.perf_counter()
         with telemetry.run("assignment", new_run_id()) as recorder:
-            recorder.latest = Progress(0.0, 0.0, 1.0, 1.0, 0, 0, 1)
+            recorder.latest = Progress(
+                elapsed=0.0, work=0.0, incumbent=1.0, bound=1.0, nodes=0, iterations=0, improvements=1
+            )
         timings.append((time.perf_counter() - start) * 1000)
     for checkpoint in CHECKPOINTS:
         window = timings[checkpoint - WINDOW : checkpoint]

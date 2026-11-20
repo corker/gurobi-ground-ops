@@ -7,10 +7,10 @@ from ground_ops.domain import AssignmentInstance, CoverageInstance, Handler, Res
 from tests.support import InMemoryTelemetry
 
 INSTANCE = AssignmentInstance(
-    tasks=(Task(0, 600, 615), Task(1, 420, 440), Task(2, 300, 320)),
-    handlers=(Handler(0, 360, 600), Handler(1, 360, 600)),
+    tasks=(Task(id=0, start=600, end=615), Task(id=1, start=420, end=440), Task(id=2, start=300, end=320)),
+    handlers=(Handler(id=0, shift_start=360, shift_end=600), Handler(id=1, shift_start=360, shift_end=600)),
 )
-RESULT = Result(Status.OPTIMAL, objective=60.0, bound=60.0, gap=0.0, solution={0: 0, 1: 0, 2: 0})
+RESULT = Result(status=Status.OPTIMAL, objective=60.0, bound=60.0, gap=0.0, solution={0: 0, 1: 0, 2: 0})
 
 
 def test_report_lists_each_handlers_tasks_in_time_order_with_overtime() -> None:
@@ -35,9 +35,12 @@ def test_invalid_task_count_is_reported_on_stderr(capsys: pytest.CaptureFixture[
 
 COVERAGE = CoverageInstance(
     demand=(1, 1, 1),
-    patterns=(ShiftPattern(0, start=0, length=3, break_slot=None), ShiftPattern(1, start=1, length=1, break_slot=None)),
+    patterns=(
+        ShiftPattern(id=0, start=0, length=3, break_slot=None),
+        ShiftPattern(id=1, start=1, length=1, break_slot=None),
+    ),
 )
-COVERAGE_RESULT = Result(Status.OPTIMAL, objective=4.0, bound=4.0, gap=0.0, solution={0: 1, 1: 1})
+COVERAGE_RESULT = Result(status=Status.OPTIMAL, objective=4.0, bound=4.0, gap=0.0, solution={0: 1, 1: 1})
 
 
 def test_coverage_report_shows_the_roster_and_demand_against_on_duty() -> None:
@@ -93,7 +96,14 @@ def test_the_cli_traces_instance_generation_too(monkeypatch: pytest.MonkeyPatch,
 
 
 def test_report_of_an_infeasible_result_lists_the_conflicting_constraints() -> None:
-    infeasible = Result(Status.INFEASIBLE, None, None, None, {}, iis=("cover[0]", "no_overlap[h0,t0,t1]"))
+    infeasible = Result(
+        status=Status.INFEASIBLE,
+        objective=None,
+        bound=None,
+        gap=None,
+        solution={},
+        iis=("cover[0]", "no_overlap[h0,t0,t1]"),
+    )
     assert report(INSTANCE, seed=4, result=infeasible).splitlines() == [
         "Model 1: 3 tasks, 2 handlers, seed 4",
         "status: infeasible",
@@ -108,15 +118,15 @@ def test_report_of_an_infeasible_result_lists_the_conflicting_constraints() -> N
     ("result", "expected"),
     [
         (
-            Result(Status.LIMIT_REACHED, objective=None, bound=None, gap=None, solution={}),
+            Result(status=Status.LIMIT_REACHED, objective=None, bound=None, gap=None, solution={}),
             "status: limit reached  no solution found  bound: none yet",
         ),
         (
-            Result(Status.LIMIT_REACHED, objective=60.0, bound=None, gap=None, solution={0: 0, 1: 0, 2: 0}),
+            Result(status=Status.LIMIT_REACHED, objective=60.0, bound=None, gap=None, solution={0: 0, 1: 0, 2: 0}),
             "status: limit reached  overtime: 60 min  bound: none yet  gap: undefined",
         ),
         (
-            Result(Status.LIMIT_REACHED, objective=60.0, bound=45.0, gap=0.25, solution={0: 0, 1: 0, 2: 0}),
+            Result(status=Status.LIMIT_REACHED, objective=60.0, bound=45.0, gap=0.25, solution={0: 0, 1: 0, 2: 0}),
             "status: limit reached  overtime: 60 min  bound: 45 min  gap: 25.00%",
         ),
     ],
@@ -128,7 +138,7 @@ def test_report_of_a_stopped_solve_shows_what_is_known(result: Result, expected:
 
 
 def test_coverage_report_without_a_roster_shows_only_the_status() -> None:
-    stopped = Result(Status.LIMIT_REACHED, objective=None, bound=3.0, gap=None, solution={})
+    stopped = Result(status=Status.LIMIT_REACHED, objective=None, bound=3.0, gap=None, solution={})
     assert coverage_report(COVERAGE, seed=2, result=stopped).splitlines() == [
         "Model 2: 3 half-hour slots, 2 shift patterns, seed 2",
         "status: limit reached  no solution found  bound: 3 paid half-hours",

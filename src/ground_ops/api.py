@@ -8,14 +8,13 @@ import threading
 import time
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, nullcontext
-from dataclasses import dataclass, field
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.sse import EventSourceResponse, ServerSentEvent
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from ground_ops.domain import AssignmentInstance, CoverageInstance, Result, Status
+from ground_ops.domain import FROZEN, AssignmentInstance, CoverageInstance, Result, Status
 from ground_ops.instances import generate_assignment, generate_coverage
 from ground_ops.model1 import model_size, solve_assignment
 from ground_ops.model2 import solve_coverage
@@ -31,6 +30,8 @@ type RunState = Literal["running", "done", "failed"]
 
 
 class RunRequest(BaseModel):
+    model_config = FROZEN
+
     model: ModelName
     # Each task is one constraint and each handler at least two variables, so larger values never fit the licence.
     tasks: int = Field(
@@ -47,36 +48,14 @@ class RunRequest(BaseModel):
     work_limit: float | None = Field(default=None, ge=0, description="Stop after this many work units")
 
 
-class ProgressView(BaseModel):
-    elapsed: float
-    work: float
-    incumbent: float | None
-    bound: float | None
-    gap: float | None
-    nodes: int
-    iterations: int
-    improvements: int
-
-    @classmethod
-    def of(cls, p: Progress) -> "ProgressView":
-        return cls(
-            elapsed=p.elapsed,
-            work=p.work,
-            incumbent=p.incumbent,
-            bound=p.bound,
-            gap=p.gap,
-            nodes=p.nodes,
-            iterations=p.iterations,
-            improvements=p.improvements,
-        )
-
-
 class RunView(BaseModel):
+    model_config = FROZEN
+
     id: str
     model: ModelName
     state: RunState
     instance: AssignmentInstance | CoverageInstance
-    progress: ProgressView | None
+    progress: Progress | None
     result: Result | None
     error: str | None
 
@@ -84,19 +63,24 @@ class RunView(BaseModel):
 class Finished(BaseModel):
     """The last event of a run's stream."""
 
+    model_config = FROZEN
+
     status: Status | None
     error: str | None
 
 
-@dataclass
-class Run:
+class Run(BaseModel):
+    """A run's mutable state, shared between the solver thread and the request handlers."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     id: str
     model: ModelName
     instance: AssignmentInstance | CoverageInstance
-    stop: threading.Event = field(default_factory=threading.Event)
+    stop: threading.Event = Field(default_factory=threading.Event)
     # Guards everything below; the solver thread notifies it whenever an event is added.
-    changed: threading.Condition = field(default_factory=threading.Condition)
-    events: list[ServerSentEvent] = field(default_factory=list)
+    changed: threading.Condition = Field(default_factory=threading.Condition)
+    events: list[ServerSentEvent] = Field(default_factory=list)
     progress: Progress | None = None
     sampled_at: float = float("-inf")
     result: Result | None = None
@@ -110,13 +94,12 @@ class Run:
     def view(self) -> RunView:
         with self.changed:
             state: RunState = "failed" if self.error is not None else "done" if self.done else "running"
-            progress = None if self.progress is None else ProgressView.of(self.progress)
             return RunView(
                 id=self.id,
                 model=self.model,
                 state=state,
                 instance=self.instance,
-                progress=progress,
+                progress=self.progress,
                 result=self.result,
                 error=self.error,
             )
@@ -136,7 +119,7 @@ def _execute(run: Run, settings: SolverSettings, telemetry: Telemetry | None, wo
             run.progress = progress
             if (now := time.monotonic()) - run.sampled_at >= PROGRESS_INTERVAL_S:
                 run.sampled_at = now
-                run.add_event("progress", ProgressView.of(progress))
+                run.add_event("progress", progress)
 
     recording: AbstractContextManager[ProgressRecorder] = (
         nullcontext(ProgressRecorder(run.id, on_progress=on_progress, stop=run.stop))
@@ -159,7 +142,7 @@ def _execute(run: Run, settings: SolverSettings, telemetry: Telemetry | None, wo
         workers.release()
         with run.changed:
             if run.progress is not None:
-                run.add_event("progress", ProgressView.of(run.progress))
+                run.add_event("progress", run.progress)
             run.result, run.error, run.done = result, error, True
             run.add_event("done", Finished(status=None if result is None else result.status, error=error))
 
@@ -210,7 +193,7 @@ def create_app(telemetry: Telemetry | None) -> FastAPI:
             raise HTTPException(status_code=422, detail=str(invalid)) from invalid
         if not workers.acquire(blocking=False):
             raise HTTPException(status_code=429, detail=f"all {WORKERS} workers are busy; try again when a run ends")
-        run = Run(new_run_id(), request.model, instance)
+        run = Run(id=new_run_id(), model=request.model, instance=instance)
         settings = SolverSettings(expose_search=request.expose_search, work_limit=request.work_limit)
         _start(run, settings, telemetry, workers)
         with runs_lock:

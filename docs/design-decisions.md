@@ -2,7 +2,7 @@
 
 Each topic below lists the alternatives, compares them, recommends one, and rates the confidence in that recommendation. Where confidence isn't high, it says what would raise it.
 
-**Contributors:** you don't need to read this file end to end. [plan.md](plan.md) cites a decision number (D1 to D22) wherever one applies; read those sections only.
+**Contributors:** you don't need to read this file end to end. [plan.md](plan.md) cites a decision number (D1 to D23) wherever one applies; read those sections only.
 
 All measurements come from throwaway proof-of-concept scripts run on 2026-11-20. Those scripts aren't in the repo. The key numbers will be re-measured by reproducible scripts in `experiments/`, as listed in [plan.md](plan.md). Settings: Apple M4 Pro, macOS (Darwin 25.6), Python 3.12.12, gurobipy 14.0.0, ortools 9.15.6755, highspy 1.16.0, PuLP 4.3.1, opentelemetry-sdk 1.45.2, `Threads=1` unless stated. Every timing is from one machine, so it shows relative differences only. Work units are Gurobi's deterministic effort measure, so they compare cleanly across runs; wall-clock seconds don't.
 
@@ -34,6 +34,7 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 | 20 | Observability, API and UI | UI serving and API types | Vite dev proxy while developing; FastAPI serves the built UI; types generated with openapi-typescript | Medium (80%) |
 | 21 | Observability, API and UI | Run identity in telemetry | A `run_id` unique across processes, as a metric attribute on observable gauges for active runs only, with a raised cap | High (85%) |
 | 22 | Observability, API and UI | TypeScript quality checks | `tsc` with `strict: true`, oxlint, Prettier, Vitest; one `npm run check` | Medium (70%) |
+| 23 | Licence and models | Data types | Frozen, strict Pydantic models everywhere, core and API (decided) | High (85%) |
 
 ## 1. gurobipy version and licence
 
@@ -392,6 +393,22 @@ The UI needs the same kind of enforced check as the Python side (`ruff`, `mypy -
 **Recommendation.** One command, `npm run check` (`tsc -b && oxlint && prettier --check . && vitest run`), which must pass before a UI change is done, like the Python check.
 
 **Confidence: Medium (70%).** `tsc` strict mode and Vitest are measured. Two things aren't: why oxlint reported nothing on the planted file, and whether ESLint's type-aware rules (for example, un-awaited promises) catch enough more to be worth a second tool. **To raise it:** at Step 9, plant one issue each tool should catch and compare oxlint with ESLint and typescript-eslint on the real UI code.
+
+## 23. Data types
+
+Measured on 2026-11-20 (Apple M4 Pro, Python 3.12.12, Pydantic 2.14.4, best of five runs of 200,000 constructions): a frozen stdlib dataclass with `Progress`'s fields took 0.44 µs to build, a frozen Pydantic model 0.53 µs. The 40-task exposed solve records 32,447 progress samples, so the difference is about 3 ms of a solve of about 3 s. Pydantic is already installed for every user, because FastAPI depends on it.
+
+| Option | One way to declare types? | Notes |
+| --- | --- | --- |
+| Dataclasses in the core, Pydantic in the API | No | Smallest code; one mirror type (`ProgressView`) because Pydantic doesn't serialise a dataclass property |
+| Dataclasses everywhere | Yes | FastAPI accepts dataclasses as request bodies and responses ([Using Dataclasses](https://fastapi.tiangolo.com/advanced/dataclasses/)), but warns they "can't do everything Pydantic models can do" |
+| **Pydantic everywhere** | Yes | `gap` becomes a computed field, so the mirror type goes away and the OpenAPI schema carries it; values from Gurobi's callbacks, which gurobipy types as `Any`, are checked at runtime |
+
+Measured with Pydantic 2.14.4: in its default (lax) mode, `Task(id="3", start="360", end=400.0)` is silently converted, so the repo's models are **strict** (`ConfigDict(frozen=True, strict=True)`): a string for an int, a float for an int or a bool for an int is refused, while an int is accepted for a float. Neither mode checks domain rules: `Task(id=0, start=400, end=360)` is accepted. `model_copy(update=...)` doesn't validate, so a copy is used only for trusted updates. mypy reports `prop-decorator` for `@computed_field` on a property, so that line carries a targeted ignore. `BaseModel` takes keyword arguments only, so all 77 constructor calls were rewritten.
+
+**Recommendation.** Pydantic everywhere, with one shared strict, frozen config (decided by the owner). After the change the full check passed unchanged (161 tests), and the 40-task exposed solve still took 32,424 nodes and 3.170548 work units.
+
+**Confidence: High (85%)** that it works as described: measured and tested here. The trade-off against dataclasses was close; the choice ties the core's types to Pydantic's major versions.
 
 ## Know about, don't build
 

@@ -44,7 +44,10 @@ def exported(reader: InMemoryMetricReader) -> dict[str, list[tuple[dict[str, obj
 def test_gap_is_relative_to_the_incumbent_and_undefined_without_both(
     incumbent: float | None, bound: float | None, expected: float | None
 ) -> None:
-    assert Progress(0.0, 0.0, incumbent, bound, 0, 0, 0).gap == expected
+    assert (
+        Progress(elapsed=0.0, work=0.0, incumbent=incumbent, bound=bound, nodes=0, iterations=0, improvements=0).gap
+        == expected
+    )
 
 
 def solve_both_ways(settings: SolverSettings) -> list[tuple[ProgressRecorder, Result]]:

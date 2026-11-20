@@ -26,13 +26,13 @@ def on_duty_slots(pattern: ShiftPattern) -> set[int]:
 
 def random_task(rng: random.Random, task_id: int) -> Task:
     start = rng.randrange(0, 300)
-    return Task(task_id, start, start + rng.randrange(0, 60))
+    return Task(id=task_id, start=start, end=start + rng.randrange(0, 60))
 
 
 def random_pattern(rng: random.Random) -> ShiftPattern:
     start, length = rng.randrange(0, 20), rng.randrange(1, 12)
     break_slot = rng.choice([None, start + rng.randrange(length)])
-    return ShiftPattern(0, start, length, break_slot)
+    return ShiftPattern(id=0, start=start, length=length, break_slot=break_slot)
 
 
 def test_rules_agree_with_independent_counting() -> None:
@@ -40,7 +40,7 @@ def test_rules_agree_with_independent_counting() -> None:
     for case in range(CASES):
         a, b = random_task(rng, 0), random_task(rng, 1)
         shift_start = rng.randrange(0, 300)
-        handler = Handler(0, shift_start, shift_start + rng.randrange(0, 200))
+        handler = Handler(id=0, shift_start=shift_start, shift_end=shift_start + rng.randrange(0, 200))
         pattern = random_pattern(rng)
         where = f"case {case}: {a}, {b}, {handler}, {pattern}"
 

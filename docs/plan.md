@@ -1,6 +1,6 @@
 # Implementation plan
 
-What to build, in order, and when each step counts as done. The rules for *how* to build live in [AGENTS.md](../AGENTS.md). The reasons behind each choice live in [design-decisions.md](design-decisions.md), referred to below as D1 to D22. Every step is checked against the lenses in [quality-lenses.md](quality-lenses.md) that apply to it.
+What to build, in order, and when each step counts as done. The rules for *how* to build live in [AGENTS.md](../AGENTS.md). The reasons behind each choice live in [design-decisions.md](design-decisions.md), referred to below as D1 to D23. Every step is checked against the lenses in [quality-lenses.md](quality-lenses.md) that apply to it.
 
 **The goal.** Afterwards, the owner can talk about solver behaviour without bluffing: read a Gurobi log, explain what the MIP gap and the bound are doing, and tell a formulation problem from an operational one. The code is the means, not the deliverable.
 

@@ -59,11 +59,11 @@ If you think something will be needed later, say so in your reply. Don't build i
 ### KISS: readable over clever
 
 - KISS limits concepts and indirection, not language features. Readable means idiomatic modern Python, written the way an experienced Python developer expects to read it.
-- Use the language well: comprehensions and generator expressions (including the `for x in [expr]` idiom for a temporary inside one), unpacking, `match`, the walrus operator, `StrEnum`, frozen dataclasses, `X | None` unions, `type` aliases and PEP 695 generics, `itertools` and `functools`, `pathlib`, f-strings. ruff's `UP`, `C4`, `FURB`, `PERF`, `PIE` and `PTH` rules push towards these.
+- Use the language well: comprehensions and generator expressions (including the `for x in [expr]` idiom for a temporary inside one), unpacking, `match`, the walrus operator, `StrEnum`, frozen Pydantic models, `X | None` unions, `type` aliases and PEP 695 generics, `itertools` and `functools`, `pathlib`, f-strings. ruff's `UP`, `C4`, `FURB`, `PERF`, `PIE` and `PTH` rules push towards these.
 - Avoid: metaclasses, decorator magic, dynamic attribute tricks, comprehensions more than two `for` clauses deep, and one-liners that need a comment to be understood.
 - A reader should be able to follow a function top to bottom without jumping through layers of indirection.
 - Keep functions small and single-purpose, and name them for what they do.
-- Use plain data: frozen dataclasses for instances and results.
+- Use plain data: every data type (instances, results, progress, settings, API payloads) is a Pydantic model with `model_config = FROZEN` from `domain.py`, which is frozen and strict, so a wrong type is an error, never silently converted. Construct them with keyword arguments. No dataclasses, `NamedTuple`s, `TypedDict`s or tuples standing in for records; a function may still return several values as a tuple that the caller unpacks at once. Classes that hold behaviour rather than data (the Gurobi callback, the telemetry wrapper) are plain classes, and enums are `StrEnum`. Pydantic checks types, not domain rules: a rule such as "a task ends after it starts" is still checked explicitly, at the boundary that receives the data (D23).
 - Use the standard library first. Add a dependency only when it removes substantial code, and justify it.
 - Prefer early returns to nested `if`/`else`.
 

@@ -72,7 +72,7 @@ def solve_assignment(
                 with phase(recorder, "compute IIS"):
                     model.computeIIS()
                 iis = tuple(c.ConstrName for c in model.getConstrs() if c.IISConstr)
-                return Result(Status.INFEASIBLE, objective=None, bound=None, gap=None, solution={}, iis=iis)
+                return Result(status=Status.INFEASIBLE, objective=None, bound=None, gap=None, solution={}, iis=iis)
             return _result(model, x)
 
 
@@ -89,7 +89,7 @@ def _result(model: gp.Model, x: gp.tupledict[tuple[int, int], gp.Var]) -> Result
     # Before the first bound or incumbent, Gurobi reports them as infinite.
     bound = model.ObjBound if math.isfinite(model.ObjBound) else None
     if not model.SolCount:
-        return Result(status, objective=None, bound=bound, gap=None, solution={})
+        return Result(status=status, objective=None, bound=bound, gap=None, solution={})
     gap = model.MIPGap if math.isfinite(model.MIPGap) else None
     solution = {task_id: handler_id for (handler_id, task_id), var in x.items() if round(var.X) == 1}
-    return Result(status, model.ObjVal, bound, gap, solution)
+    return Result(status=status, objective=model.ObjVal, bound=bound, gap=gap, solution=solution)

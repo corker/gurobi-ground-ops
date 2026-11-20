@@ -180,8 +180,12 @@ def test_the_size_counted_without_gurobi_matches_the_built_model(n_tasks: int, s
 
 
 def test_the_size_of_an_instance_without_handlers_is_one_constraint_per_task() -> None:
-    assert model_size(AssignmentInstance((Task(0, 0, 10), Task(1, 5, 15)), handlers=())) == (0, 2)
-    assert model_size(AssignmentInstance((Task(0, 0, 10),), (Handler(0, 0, 60),))) == (1, 1)
+    assert model_size(
+        AssignmentInstance(tasks=(Task(id=0, start=0, end=10), Task(id=1, start=5, end=15)), handlers=())
+    ) == (0, 2)
+    assert model_size(
+        AssignmentInstance(tasks=(Task(id=0, start=0, end=10),), handlers=(Handler(id=0, shift_start=0, shift_end=60),))
+    ) == (1, 1)
 
 
 def test_the_core_modules_dont_load_the_web_stack() -> None:

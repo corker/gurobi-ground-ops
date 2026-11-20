@@ -71,7 +71,9 @@ def test_coverage_demand_is_seeded_and_needs_someone_in_every_slot() -> None:
 
 def test_fewer_handlers_keeps_the_first_handlers_of_the_default_instance() -> None:
     default = generate_assignment(20, seed=1)
-    assert generate_assignment(20, seed=1, n_handlers=2) == AssignmentInstance(default.tasks, default.handlers[:2])
+    assert generate_assignment(20, seed=1, n_handlers=2) == AssignmentInstance(
+        tasks=default.tasks, handlers=default.handlers[:2]
+    )
 
 
 def test_handler_count_cant_be_negative() -> None:

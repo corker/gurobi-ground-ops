@@ -13,8 +13,13 @@ EXPOSED = SolverSettings(expose_search=True)
 
 # Worked by hand: handler 1 must take tasks 1 and 2, so task 3 goes to handler 0, 15 minutes past its shift.
 HAND_MADE = AssignmentInstance(
-    tasks=(Task(0, 360, 380), Task(1, 470, 490), Task(2, 500, 520), Task(3, 475, 495)),
-    handlers=(Handler(0, 360, 480), Handler(1, 420, 540)),
+    tasks=(
+        Task(id=0, start=360, end=380),
+        Task(id=1, start=470, end=490),
+        Task(id=2, start=500, end=520),
+        Task(id=3, start=475, end=495),
+    ),
+    handlers=(Handler(id=0, shift_start=360, shift_end=480), Handler(id=1, shift_start=420, shift_end=540)),
 )
 
 
@@ -60,14 +65,17 @@ def test_solution_is_feasible_and_its_overtime_equals_the_objective() -> None:
 def test_peak_concurrency_handlers_suffice_and_one_fewer_is_infeasible() -> None:
     instance = generate_assignment(30, seed=1)
     peak = len(instance.handlers) - 1
-    enough = AssignmentInstance(instance.tasks, instance.handlers[:peak])
-    too_few = AssignmentInstance(instance.tasks, instance.handlers[: peak - 1])
+    enough = AssignmentInstance(tasks=instance.tasks, handlers=instance.handlers[:peak])
+    too_few = AssignmentInstance(tasks=instance.tasks, handlers=instance.handlers[: peak - 1])
     assert solve_assignment(enough).status is Status.OPTIMAL
     assert solve_assignment(too_few).status is Status.INFEASIBLE
 
 
 def test_infeasible_instance_reports_infeasible_without_a_solution() -> None:
-    overlapping = AssignmentInstance(tasks=(Task(0, 360, 400), Task(1, 380, 420)), handlers=(Handler(0, 360, 600),))
+    overlapping = AssignmentInstance(
+        tasks=(Task(id=0, start=360, end=400), Task(id=1, start=380, end=420)),
+        handlers=(Handler(id=0, shift_start=360, shift_end=600),),
+    )
     result = solve_assignment(overlapping)
     assert result.status is Status.INFEASIBLE
     assert result.objective is None
@@ -81,11 +89,14 @@ def test_instance_over_the_free_licence_limit_is_rejected_before_solving() -> No
 
 def test_instance_without_tasks_is_rejected() -> None:
     with pytest.raises(ValueError, match="at least one task"):
-        solve_assignment(AssignmentInstance(tasks=(), handlers=(Handler(0, 360, 600),)))
+        solve_assignment(AssignmentInstance(tasks=(), handlers=(Handler(id=0, shift_start=360, shift_end=600),)))
 
 
 def test_instance_without_handlers_is_infeasible() -> None:
-    assert solve_assignment(AssignmentInstance(tasks=(Task(0, 360, 400),), handlers=())).status is Status.INFEASIBLE
+    assert (
+        solve_assignment(AssignmentInstance(tasks=(Task(id=0, start=360, end=400),), handlers=())).status
+        is Status.INFEASIBLE
+    )
 
 
 def test_effort_limit_returns_feasible_with_nonzero_gap() -> None:
@@ -131,7 +142,8 @@ def test_a_warm_start_from_the_previous_schedule_is_used_and_reaches_the_cold_op
 def test_iis_names_the_two_overlapping_tasks_and_the_one_handler_who_cant_do_both() -> None:
     # Task 2 is hours later and doesn't conflict with either, so its cover constraint isn't part of the conflict.
     instance = AssignmentInstance(
-        tasks=(Task(0, 360, 400), Task(1, 380, 420), Task(2, 540, 560)), handlers=(Handler(0, 360, 600),)
+        tasks=(Task(id=0, start=360, end=400), Task(id=1, start=380, end=420), Task(id=2, start=540, end=560)),
+        handlers=(Handler(id=0, shift_start=360, shift_end=600),),
     )
     assert set(solve_assignment(instance).iis) == {"cover[0]", "cover[1]", "no_overlap[h0,t0,t1]"}
 

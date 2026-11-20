@@ -16,5 +16,5 @@ def in_memory() -> Iterator[InMemoryTelemetry]:
     logs = InMemoryLogRecordExporter()  # type: ignore[no-untyped-call]
     metrics, spans = InMemoryMetricReader(), InMemorySpanExporter()
     telemetry = Telemetry(metrics, SimpleSpanProcessor(spans), SimpleLogRecordProcessor(logs))
-    yield InMemoryTelemetry(telemetry, metrics, spans, logs)
+    yield InMemoryTelemetry(telemetry=telemetry, metrics=metrics, spans=spans, logs=logs)
     telemetry.shutdown()

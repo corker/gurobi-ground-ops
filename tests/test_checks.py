@@ -2,8 +2,8 @@ from ground_ops.checks import assignment_violations, coverage_shortfalls, total_
 from ground_ops.domain import AssignmentInstance, CoverageInstance, Handler, ShiftPattern, Task
 
 INSTANCE = AssignmentInstance(
-    tasks=(Task(0, 360, 380), Task(1, 370, 390), Task(2, 500, 520)),
-    handlers=(Handler(0, 360, 480), Handler(1, 360, 600)),
+    tasks=(Task(id=0, start=360, end=380), Task(id=1, start=370, end=390), Task(id=2, start=500, end=520)),
+    handlers=(Handler(id=0, shift_start=360, shift_end=480), Handler(id=1, shift_start=360, shift_end=600)),
 )
 
 
@@ -27,7 +27,10 @@ def test_total_overtime_sums_minutes_outside_each_shift() -> None:
 
 COVERAGE = CoverageInstance(
     demand=(1, 2, 1),
-    patterns=(ShiftPattern(0, start=0, length=2, break_slot=None), ShiftPattern(1, start=1, length=2, break_slot=None)),
+    patterns=(
+        ShiftPattern(id=0, start=0, length=2, break_slot=None),
+        ShiftPattern(id=1, start=1, length=2, break_slot=None),
+    ),
 )
 
 

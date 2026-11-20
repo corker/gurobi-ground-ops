@@ -44,7 +44,7 @@ def solve_coverage(
             if recorder is not None:
                 recorder.finish(model)
             if model.Status == GRB.INFEASIBLE:
-                return Result(Status.INFEASIBLE, objective=None, bound=None, gap=None, solution={})
+                return Result(status=Status.INFEASIBLE, objective=None, bound=None, gap=None, solution={})
             return _result(model, y)
 
 
@@ -61,7 +61,7 @@ def _result(model: gp.Model, y: gp.tupledict[int, gp.Var]) -> Result:
     # Before the first bound or incumbent, Gurobi reports them as infinite.
     bound = model.ObjBound if math.isfinite(model.ObjBound) else None
     if not model.SolCount:
-        return Result(status, objective=None, bound=bound, gap=None, solution={})
+        return Result(status=status, objective=None, bound=bound, gap=None, solution={})
     gap = model.MIPGap if math.isfinite(model.MIPGap) else None
     staffing = {pattern_id: people for pattern_id, var in y.items() if (people := round(var.X)) > 0}
-    return Result(status, model.ObjVal, bound, gap, staffing)
+    return Result(status=status, objective=model.ObjVal, bound=bound, gap=gap, solution=staffing)

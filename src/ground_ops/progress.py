@@ -7,18 +7,21 @@ import math
 import threading
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
-from dataclasses import dataclass, replace
 
 import gurobipy as gp
 from gurobipy import GRB
+from pydantic import BaseModel, computed_field
+
+from ground_ops.domain import FROZEN
 
 type SpanStarter = Callable[[str], AbstractContextManager[object]]
 type LineSink = Callable[[str], None]
 type ProgressSink = Callable[["Progress"], None]
 
 
-@dataclass(frozen=True)
-class Progress:
+class Progress(BaseModel):
+    model_config = FROZEN
+
     elapsed: float
     work: float
     incumbent: float | None
@@ -27,6 +30,7 @@ class Progress:
     iterations: int
     improvements: int
 
+    @computed_field  # type: ignore[prop-decorator]  # mypy doesn't support decorators on a property
     @property
     def gap(self) -> float | None:
         """Gurobi's MIP gap, |incumbent - bound| / |incumbent|; None until there are both."""
@@ -100,7 +104,7 @@ class ProgressRecorder:
                 self._best = objective
                 self._improvements += 1
                 if self.latest is not None:
-                    self._record(replace(self.latest, improvements=self._improvements))
+                    self._record(self.latest.model_copy(update={"improvements": self._improvements}))
         elif where == GRB.Callback.MIP:
             best = model.cbGet(GRB.Callback.MIP_OBJBST)
             self._record(

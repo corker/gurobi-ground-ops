@@ -33,7 +33,7 @@ Apply the first group to every feature, then the groups that match what the feat
 | --- | --- | --- | --- |
 | 12 | **Observability** | Do the metrics alone show what the solve did: gap, incumbent, bound, incumbent improvements, nodes, iterations, elapsed time and work units? Are names namespaced and lowercase, with UCUM units (`s`)? Are attributes low-cardinality, with one ID per run, unique across processes, on active-only instruments with an explicit cap (D21)? Do the final emitted values equal the model's final attributes? | Repo purpose; [OpenTelemetry conventions](https://opentelemetry.io/docs/specs/semconv/general/metrics/); the gap gurobi-logtools leaves |
 | 13 | **Measurement discipline** | Is any timing comparison, such as warm start versus cold start, repeated across several `Seed` values, with the spread reported? Are the machine, Gurobi version and parameters stated? | [Gurobi on comparisons](https://support.gurobi.com/hc/en-us/articles/26992650628369) |
-| 14 | **Usability of outputs** | Is the IIS report readable without knowing Gurobi? Do public functions take and return plain dataclasses? | ISO: interaction capability |
+| 14 | **Usability of outputs** | Is the IIS report readable without knowing Gurobi? Do public functions take and return the repo's frozen Pydantic models? | ISO: interaction capability |
 
 ### API and UI features
 

@@ -1,7 +1,6 @@
 """Seeded synthetic instances. Where the numbers come from is in docs/domain.md."""
 
 import random
-from dataclasses import replace
 
 from ground_ops.domain import GAP_MINUTES, AssignmentInstance, CoverageInstance, Handler, ShiftPattern, Task
 
@@ -26,9 +25,9 @@ def _minutes(rng: random.Random, low_high_mode: tuple[int, int, int]) -> int:
 def _turnaround_tasks(rng: random.Random, first_id: int) -> tuple[Task, Task]:
     arrival = rng.randrange(ARRIVALS_FROM, ARRIVALS_UNTIL, 5)
     departure = arrival + _minutes(rng, GROUND_TIME)
-    unload = Task(first_id, arrival, arrival + _minutes(rng, UNLOAD))
+    unload = Task(id=first_id, start=arrival, end=arrival + _minutes(rng, UNLOAD))
     load_end = departure - PUSH_BACK
-    load = Task(first_id + 1, load_end - _minutes(rng, LOAD), load_end)
+    load = Task(id=first_id + 1, start=load_end - _minutes(rng, LOAD), end=load_end)
     return unload, load
 
 
@@ -50,11 +49,11 @@ def generate_assignment(n_tasks: int, seed: int, n_handlers: int | None = None) 
     rng = random.Random(seed)
     tasks = tuple(t for i in range(0, n_tasks, TASKS_PER_TURNAROUND) for t in _turnaround_tasks(rng, i))
     handlers = tuple(
-        Handler(h, start, start + rng.choice(SHIFT_LENGTHS))
+        Handler(id=h, shift_start=start, shift_end=start + rng.choice(SHIFT_LENGTHS))
         for h in range(peak_concurrency(tasks) + 1 if n_handlers is None else n_handlers)
         for start in [rng.choice(SHIFT_STARTS)]
     )
-    return AssignmentInstance(tasks, handlers)
+    return AssignmentInstance(tasks=tasks, handlers=handlers)
 
 
 def move_task(instance: AssignmentInstance, task_id: int, minutes: int) -> AssignmentInstance:
@@ -62,9 +61,9 @@ def move_task(instance: AssignmentInstance, task_id: int, minutes: int) -> Assig
     if all(t.id != task_id for t in instance.tasks):
         raise ValueError(f"there is no task {task_id}")
     tasks = tuple(
-        replace(t, start=t.start + minutes, end=t.end + minutes) if t.id == task_id else t for t in instance.tasks
+        Task(id=t.id, start=t.start + minutes, end=t.end + minutes) if t.id == task_id else t for t in instance.tasks
     )
-    return replace(instance, tasks=tasks)
+    return AssignmentInstance(tasks=tasks, handlers=instance.handlers)
 
 
 SLOTS_PER_DAY = 48
@@ -78,7 +77,12 @@ def shift_patterns() -> tuple[ShiftPattern, ...]:
     """Every 4-, 6- and 8-hour shift that fits in the day; shifts of 6 hours or more break at the half-way slot."""
     starts_and_lengths = [(start, length) for length in PATTERN_LENGTHS for start in range(SLOTS_PER_DAY - length + 1)]
     return tuple(
-        ShiftPattern(i, start, length, start + length // 2 if length >= MIN_LENGTH_WITH_BREAK else None)
+        ShiftPattern(
+            id=i,
+            start=start,
+            length=length,
+            break_slot=start + length // 2 if length >= MIN_LENGTH_WITH_BREAK else None,
+        )
         for i, (start, length) in enumerate(starts_and_lengths)
     )
 
@@ -87,4 +91,4 @@ def generate_coverage(seed: int) -> CoverageInstance:
     """Model 2 instance: the hourly demand profile, varied by up to one person per half-hour slot."""
     rng = random.Random(seed)
     demand = tuple(max(1, HOURLY_DEMAND[slot // 2] + rng.randint(-1, 1)) for slot in range(SLOTS_PER_DAY))
-    return CoverageInstance(demand, shift_patterns())
+    return CoverageInstance(demand=demand, patterns=shift_patterns())

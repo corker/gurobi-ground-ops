@@ -13,10 +13,10 @@ from ground_ops.solver import SolverSettings
 HAND_MADE = CoverageInstance(
     demand=(1, 2, 2, 1),
     patterns=(
-        ShiftPattern(0, start=0, length=2, break_slot=None),
-        ShiftPattern(1, start=1, length=2, break_slot=None),
-        ShiftPattern(2, start=2, length=2, break_slot=None),
-        ShiftPattern(3, start=0, length=4, break_slot=None),
+        ShiftPattern(id=0, start=0, length=2, break_slot=None),
+        ShiftPattern(id=1, start=1, length=2, break_slot=None),
+        ShiftPattern(id=2, start=2, length=2, break_slot=None),
+        ShiftPattern(id=3, start=0, length=4, break_slot=None),
     ),
 )
 
@@ -24,8 +24,11 @@ HAND_MADE = CoverageInstance(
 def small_instance(seed: int) -> CoverageInstance:
     rng = random.Random(seed)
     starts_and_lengths = [(s, n) for n in (2, 3) for s in range(6 - n + 1)]
-    patterns = tuple(ShiftPattern(i, s, n, s + 1 if n == 3 else None) for i, (s, n) in enumerate(starts_and_lengths))
-    return CoverageInstance(tuple(rng.randint(0, 2) for _ in range(6)), patterns)
+    patterns = tuple(
+        ShiftPattern(id=i, start=s, length=n, break_slot=s + 1 if n == 3 else None)
+        for i, (s, n) in enumerate(starts_and_lengths)
+    )
+    return CoverageInstance(demand=tuple(rng.randint(0, 2) for _ in range(6)), patterns=patterns)
 
 
 def brute_force_optimum(instance: CoverageInstance) -> int:
@@ -62,7 +65,7 @@ def test_full_day_roster_covers_demand_and_its_cost_equals_the_objective() -> No
 
 
 def test_a_slot_no_pattern_covers_makes_the_instance_infeasible() -> None:
-    uncovered = CoverageInstance(demand=(1, 1), patterns=(ShiftPattern(0, start=0, length=1, break_slot=None),))
+    uncovered = CoverageInstance(demand=(1, 1), patterns=(ShiftPattern(id=0, start=0, length=1, break_slot=None),))
     result = solve_coverage(uncovered)
     assert result.status is Status.INFEASIBLE
     assert result.solution == {}

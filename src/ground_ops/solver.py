@@ -6,19 +6,22 @@ Parameters: https://docs.gurobi.com/projects/optimizer/en/current/reference/para
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
 from pathlib import Path
 
 import gurobipy as gp
+from pydantic import BaseModel
+
+from ground_ops.domain import FROZEN
 
 FREE_LICENCE_LIMIT = 2000
 
 
-@dataclass(frozen=True)
-class SolverSettings:
+class SolverSettings(BaseModel):
     """`log_file` appends Gurobi's log to a file. `expose_search` sets Presolve=0 and Cuts=0, so small instances
     need a visible branch-and-bound search. `work_limit` stops the solve after that many work units, Gurobi's
     deterministic effort measure."""
+
+    model_config = FROZEN
 
     log_file: Path | None = None
     expose_search: bool = False

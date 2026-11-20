@@ -24,7 +24,9 @@ from opentelemetry.sdk.metrics.view import View
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from pydantic import BaseModel
 
+from ground_ops.domain import FROZEN
 from ground_ops.progress import Progress, ProgressRecorder, ProgressSink
 
 PROCESS_START = int(time.time())
@@ -36,15 +38,25 @@ DEFAULT_EXPORT_INTERVAL_MS = 1000
 type Observer = Callable[[CallbackOptions], Iterable[Observation]]
 
 
-METRICS: tuple[tuple[str, str, Callable[[Progress], float | None]], ...] = (
-    ("gap", "1", lambda p: p.gap),
-    ("incumbent", "{objective}", lambda p: p.incumbent),
-    ("bound", "{objective}", lambda p: p.bound),
-    ("incumbent_improvements", "{solution}", lambda p: p.improvements),
-    ("nodes", "{node}", lambda p: p.nodes),
-    ("simplex_iterations", "{iteration}", lambda p: p.iterations),
-    ("elapsed", "s", lambda p: p.elapsed),
-    ("work", "{work_unit}", lambda p: p.work),
+class Metric(BaseModel):
+    """One gauge: its name after `groundops.solver.`, its UCUM unit, and how to read it from a progress sample."""
+
+    model_config = FROZEN
+
+    name: str
+    unit: str
+    value: Callable[[Progress], float | None]
+
+
+METRICS = (
+    Metric(name="gap", unit="1", value=lambda p: p.gap),
+    Metric(name="incumbent", unit="{objective}", value=lambda p: p.incumbent),
+    Metric(name="bound", unit="{objective}", value=lambda p: p.bound),
+    Metric(name="incumbent_improvements", unit="{solution}", value=lambda p: p.improvements),
+    Metric(name="nodes", unit="{node}", value=lambda p: p.nodes),
+    Metric(name="simplex_iterations", unit="{iteration}", value=lambda p: p.iterations),
+    Metric(name="elapsed", unit="s", value=lambda p: p.elapsed),
+    Metric(name="work", unit="{work_unit}", value=lambda p: p.work),
 )
 
 
@@ -71,8 +83,10 @@ class Telemetry:
         self._tracer = self._tracer_provider.get_tracer("ground_ops")
         self._logger = self._logger_provider.get_logger("ground_ops.gurobi")
         meter = self._meter_provider.get_meter("ground_ops")
-        for name, unit, value in METRICS:
-            meter.create_observable_gauge(f"groundops.solver.{name}", callbacks=[self._observer(value)], unit=unit)
+        for metric in METRICS:
+            meter.create_observable_gauge(
+                f"groundops.solver.{metric.name}", callbacks=[self._observer(metric.value)], unit=metric.unit
+            )
 
     def _observer(self, value: Callable[[Progress], float | None]) -> Observer:
         def observe(_: CallbackOptions) -> Iterable[Observation]:
