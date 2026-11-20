@@ -3,9 +3,10 @@
 import argparse
 import sys
 
-from ground_ops.domain import AssignmentInstance, Result, overtime
-from ground_ops.instances import generate_assignment
+from ground_ops.domain import AssignmentInstance, CoverageInstance, Result, ShiftPattern, covers, overtime
+from ground_ops.instances import generate_assignment, generate_coverage
 from ground_ops.model1 import solve_assignment
+from ground_ops.model2 import solve_coverage
 
 
 def _clock(minutes: int) -> str:
@@ -35,14 +36,48 @@ def report(instance: AssignmentInstance, seed: int, result: Result) -> str:
     return "\n".join([header, summary, *_schedule_lines(instance, result)])
 
 
+def _slot_clock(slot: int) -> str:
+    return _clock(slot * 30)
+
+
+def _pattern_label(pattern: ShiftPattern) -> str:
+    shift = f"{_slot_clock(pattern.start)}-{_slot_clock(pattern.start + pattern.length)}"
+    return shift + (f" (break {_slot_clock(pattern.break_slot)})" if pattern.break_slot is not None else "")
+
+
+def coverage_report(instance: CoverageInstance, seed: int, result: Result) -> str:
+    """The text `ground-ops cover` prints for an optimal result."""
+    patterns = {p.id: p for p in instance.patterns}
+    lines = [
+        f"Model 2: {len(instance.demand)} half-hour slots, {len(instance.patterns)} shift patterns, seed {seed}",
+        f"status: {result.status}  cost: {result.objective:g} paid half-hours  "
+        f"bound: {result.bound:g} paid half-hours  gap: {(result.gap or 0.0) * 100:.2f}%",
+        "roster:",
+    ]
+    for pattern_id, people in sorted(result.solution.items(), key=lambda item: patterns[item[0]].start):
+        lines.append(f"  {people} x {_pattern_label(patterns[pattern_id])}")
+    lines.append("slot   demand  on duty")
+    for slot, needed in enumerate(instance.demand):
+        on_duty = sum(n for p, n in result.solution.items() if covers(patterns[p], slot))
+        surplus = f"  (+{on_duty - needed})" if on_duty > needed else ""
+        lines.append(f"{_slot_clock(slot)}  {needed:>6}  {on_duty:>7}{surplus}")
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ground-ops")
     commands = parser.add_subparsers(dest="command", required=True)
     solve = commands.add_parser("solve", help="solve a seeded Model 1 instance and print the schedule")
     solve.add_argument("--tasks", type=int, default=30, help="number of tasks, even (default: 30)")
     solve.add_argument("--seed", type=int, default=1, help="instance seed (default: 1)")
+    cover = commands.add_parser("cover", help="solve a seeded Model 2 instance and print the roster")
+    cover.add_argument("--seed", type=int, default=1, help="instance seed (default: 1)")
     args = parser.parse_args(argv)
 
+    if args.command == "cover":
+        coverage = generate_coverage(args.seed)
+        print(coverage_report(coverage, args.seed, solve_coverage(coverage)))
+        return 0
     try:
         instance = generate_assignment(args.tasks, args.seed)
         result = solve_assignment(instance)

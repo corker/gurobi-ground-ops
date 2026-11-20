@@ -27,6 +27,24 @@ class AssignmentInstance:
     handlers: tuple[Handler, ...]
 
 
+@dataclass(frozen=True)
+class ShiftPattern:
+    """A shift people can be rostered on, in half-hour slots. `break_slot` is unpaid and uncovered."""
+
+    id: int
+    start: int
+    length: int
+    break_slot: int | None
+
+
+@dataclass(frozen=True)
+class CoverageInstance:
+    """Model 2: `demand[s]` is the number of people needed in half-hour slot `s`."""
+
+    demand: tuple[int, ...]
+    patterns: tuple[ShiftPattern, ...]
+
+
 class Status(StrEnum):
     OPTIMAL = "optimal"
     INFEASIBLE = "infeasible"
@@ -34,7 +52,7 @@ class Status(StrEnum):
 
 @dataclass(frozen=True)
 class Result:
-    """A solve's outcome. For Model 1, `solution` maps each task id to its handler id."""
+    """A solve's outcome. `solution` maps task id to handler id (Model 1), or pattern id to people (Model 2)."""
 
     status: Status
     objective: float | None
@@ -53,3 +71,11 @@ def overtime(task: Task, handler: Handler) -> int:
     before = max(0, min(task.end, handler.shift_start) - task.start)
     after = max(0, task.end - max(task.start, handler.shift_end))
     return before + after
+
+
+def covers(pattern: ShiftPattern, slot: int) -> bool:
+    return pattern.start <= slot < pattern.start + pattern.length and slot != pattern.break_slot
+
+
+def paid_slots(pattern: ShiftPattern) -> int:
+    return pattern.length - (pattern.break_slot is not None)

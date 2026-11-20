@@ -1,8 +1,8 @@
-"""Seeded synthetic instances. Duration ranges follow the dataset described in docs/domain.md."""
+"""Seeded synthetic instances. Where the numbers come from is in docs/domain.md."""
 
 import random
 
-from ground_ops.domain import GAP_MINUTES, AssignmentInstance, Handler, Task
+from ground_ops.domain import GAP_MINUTES, AssignmentInstance, CoverageInstance, Handler, ShiftPattern, Task
 
 ARRIVALS_FROM = 6 * 60
 ARRIVALS_UNTIL = 14 * 60
@@ -48,3 +48,26 @@ def generate_assignment(n_tasks: int, seed: int) -> AssignmentInstance:
         for start in [rng.choice(SHIFT_STARTS)]
     )
     return AssignmentInstance(tasks, handlers)
+
+
+SLOTS_PER_DAY = 48
+PATTERN_LENGTHS = (8, 12, 16)
+MIN_LENGTH_WITH_BREAK = 12
+# People needed per hour of the day, 00:00 to 23:00: quiet nights, a morning and an evening peak.
+HOURLY_DEMAND = (1, 1, 1, 1, 1, 3, 8, 8, 8, 6, 6, 6, 5, 5, 5, 5, 7, 7, 7, 7, 4, 4, 2, 2)
+
+
+def shift_patterns() -> tuple[ShiftPattern, ...]:
+    """Every 4-, 6- and 8-hour shift that fits in the day; shifts of 6 hours or more break at the half-way slot."""
+    starts_and_lengths = [(start, length) for length in PATTERN_LENGTHS for start in range(SLOTS_PER_DAY - length + 1)]
+    return tuple(
+        ShiftPattern(i, start, length, start + length // 2 if length >= MIN_LENGTH_WITH_BREAK else None)
+        for i, (start, length) in enumerate(starts_and_lengths)
+    )
+
+
+def generate_coverage(seed: int) -> CoverageInstance:
+    """Model 2 instance: the hourly demand profile, varied by up to one person per half-hour slot."""
+    rng = random.Random(seed)
+    demand = tuple(max(1, HOURLY_DEMAND[slot // 2] + rng.randint(-1, 1)) for slot in range(SLOTS_PER_DAY))
+    return CoverageInstance(demand, shift_patterns())

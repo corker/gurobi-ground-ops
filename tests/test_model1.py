@@ -42,6 +42,7 @@ def test_solution_is_feasible_and_its_overtime_equals_the_objective() -> None:
     instance = generate_assignment(30, seed=1)
     result = solve_assignment(instance)
     assert result.status is Status.OPTIMAL
+    assert result.objective == 8  # regression value, measured when this test was written
     assert assignment_violations(instance, result.solution) == []
     assert total_overtime(instance, result.solution) == result.objective
     assert result.gap == 0

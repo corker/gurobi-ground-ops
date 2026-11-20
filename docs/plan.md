@@ -12,7 +12,7 @@ What to build, in order, and when each step counts as done. The rules for *how* 
 | --- | --- | --- |
 | 1 | Project setup: package and a smoke test that proves the free licence works | Done |
 | 2 | Model 1, task assignment, with golden tests and the CLI | Done |
-| 3 | Model 2, shift coverage | Not started |
+| 3 | Model 2, shift coverage | Done |
 | 4 | Solver telemetry (the most important step) | Not started |
 | 5 | Observability stack: LGTM in Docker Compose, dashboard, traces, logs | Not started |
 | 6 | Operational edges: early stop, warm start, IIS, determinism | Not started |

@@ -6,8 +6,7 @@ import gurobipy as gp
 from gurobipy import GRB
 
 from ground_ops.domain import AssignmentInstance, Result, Status, conflict, overtime
-
-FREE_LICENCE_LIMIT = 2000
+from ground_ops.solver import check_size, gurobi_env
 
 
 def build_model(instance: AssignmentInstance, env: gp.Env) -> tuple[gp.Model, gp.tupledict[tuple[int, int], gp.Var]]:
@@ -29,23 +28,10 @@ def build_model(instance: AssignmentInstance, env: gp.Env) -> tuple[gp.Model, gp
     return model, x
 
 
-def check_size(model: gp.Model) -> None:
-    if model.NumVars > FREE_LICENCE_LIMIT or model.NumConstrs > FREE_LICENCE_LIMIT:
-        raise ValueError(
-            f"this instance needs {model.NumVars} variables and {model.NumConstrs} constraints; "
-            f"the free Gurobi licence allows {FREE_LICENCE_LIMIT} of each; use fewer tasks"
-        )
-
-
 def solve_assignment(instance: AssignmentInstance) -> Result:
     if not instance.tasks:
         raise ValueError("an instance needs at least one task")
-    with gp.Env(empty=True) as env:
-        env.setParam("OutputFlag", 0)
-        # One thread and a fixed seed, so the search path doesn't depend on the machine's core count.
-        env.setParam("Threads", 1)
-        env.setParam("Seed", 0)
-        env.start()
+    with gurobi_env() as env:
         model, x = build_model(instance, env)
         with model:
             check_size(model)

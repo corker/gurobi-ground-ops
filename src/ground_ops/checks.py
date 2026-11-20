@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from itertools import combinations
 
-from ground_ops.domain import AssignmentInstance, conflict, overtime
+from ground_ops.domain import AssignmentInstance, CoverageInstance, conflict, covers, overtime, paid_slots
 
 
 def assignment_violations(instance: AssignmentInstance, assignment: Mapping[int, int]) -> list[str]:
@@ -24,3 +24,20 @@ def total_overtime(instance: AssignmentInstance, assignment: Mapping[int, int]) 
     """Total overtime of a complete assignment; check `assignment_violations` first."""
     handlers = {h.id: h for h in instance.handlers}
     return sum(overtime(t, handlers[assignment[t.id]]) for t in instance.tasks)
+
+
+def coverage_shortfalls(instance: CoverageInstance, staffing: Mapping[int, int]) -> list[str]:
+    """Every broken rule, as a readable sentence. An empty list means every slot has enough people."""
+    patterns = {p.id: p for p in instance.patterns}
+    problems = [f"pattern {p} doesn't exist" for p in staffing if p not in patterns]
+    problems += [f"pattern {p} has {n} people" for p, n in staffing.items() if n < 0]
+    for slot, needed in enumerate(instance.demand):
+        on_duty = sum(n for p, n in staffing.items() if n > 0 and p in patterns and covers(patterns[p], slot))
+        if on_duty < needed:
+            problems.append(f"slot {slot} has {on_duty} on duty, needs {needed}")
+    return problems
+
+
+def total_paid_slots(instance: CoverageInstance, staffing: Mapping[int, int]) -> int:
+    patterns = {p.id: p for p in instance.patterns}
+    return sum(n * paid_slots(patterns[p]) for p, n in staffing.items())

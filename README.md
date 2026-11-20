@@ -2,7 +2,7 @@
 
 I'm a backend/platform engineer picking up Gurobi — I'm not an optimisation modeller. The models here are small and textbook, chosen because airport ground operations has the clearest real-world assignment and covering problems. The part I care about is what surrounds the solve: telemetry, deterministic tests, time limits, warm starts, infeasibility diagnosis.
 
-> **Status: Steps 1 and 2 of 9 done:** project setup, and Model 1 with its CLI. Everything else below is planned. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
+> **Status: Steps 1 to 3 of 9 done:** project setup, and both models with their CLI commands. Everything else below is planned. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
 
 ## What it does (planned)
 
@@ -82,7 +82,28 @@ H4 shift 07:00-11:00: no tasks
 H5 shift 07:00-13:00: T8 07:35-07:45, T5 11:08-11:27
 ```
 
-`--tasks` must be even (two baggage tasks per turnaround). Up to 48 tasks fit the free licence for every seed tried (20 seeds per size); from 50 on, some seeds don't, and the command says so instead of solving. This section grows as each plan step lands.
+`--tasks` must be even (two baggage tasks per turnaround). H2 does T2 entirely after its shift ends. That's valid: the objective counts only minutes outside the shift, not how far outside, so H2 and H4 (also 9 minutes) tie. An objective that also penalised calling someone back in, or travel, would be a different model.
+
+Up to 48 tasks fit the free licence for every seed tried (20 seeds per size); from 50 on, some seeds don't, and the command says so instead of solving.
+
+Roster a seeded Model 2 day (48 half-hour slots, 111 shift patterns) and print demand against people on duty:
+
+```sh
+uv run ground-ops cover --seed 2
+```
+
+```
+Model 2: 48 half-hour slots, 111 shift patterns, seed 2
+status: optimal  cost: 228 paid half-hours  bound: 228 paid half-hours  gap: 0.00%
+roster:
+  1 x 00:00-04:00
+  1 x 02:00-08:00 (break 05:00)
+  ...
+slot   demand  on duty
+...
+```
+
+This section grows as each plan step lands.
 
 ## Models
 
@@ -110,7 +131,29 @@ x_{ha} + x_{hb} \le 1 \quad \forall h \in H,\ (a, b) \in C \qquad \text{(no over
 
 In the code ([model1.py](src/ground_ops/model1.py)) the constraints are named like `cover[3]` and `no_overlap[h0,t1,t2]`. The objective is overtime rather than travel time between consecutive tasks, because travel needs variables for task order and exceeds the free licence at about 25 tasks ([design decision 2](docs/design-decisions.md#2-model-1-objective)).
 
-The tests check optima without trusting Gurobi: an independent feasibility checker, brute-force enumeration of every assignment on small instances, and a hand-solved instance. The checker and the brute force reuse the same two rule functions as the model (the 10-minute gap and the overtime calculation), so those functions have their own unit tests.
+### Model 2: how many people on each shift
+
+Choose how many people to roster on each shift pattern so that every half hour has enough people on duty, at the lowest total paid time. It's a set-covering problem: a different shape from Model 1.
+
+- $S$: half-hour slots of the day, each needing $d_s$ people.
+- $P$: shift patterns (every 4-, 6- and 8-hour shift that fits the day; those of 6 hours or more have an unpaid half-hour break at the half-way slot).
+- $a_{ps} = 1$ if pattern $p$ has someone on duty in slot $s$: inside the shift and not on the break.
+- $c_p$: paid half-hours of pattern $p$.
+- $y_p \in \{0, 1, 2, \dots\}$: people rostered on pattern $p$.
+
+```math
+\min \sum_{p \in P} c_p \, y_p
+```
+
+```math
+\sum_{p \in P} a_{ps} \, y_p \ge d_s \quad \forall s \in S \qquad \text{(demand)}
+```
+
+In the code ([model2.py](src/ground_ops/model2.py)) the constraints are named like `demand[12]`.
+
+### How the optima are tested
+
+For both models, the tests check optima without trusting Gurobi: an independent feasibility checker, brute-force enumeration of every assignment or roster on small instances, and a hand-solved instance per model. The checker and the brute force reuse the same rule functions as the models (the 10-minute gap, overtime, which slots a pattern covers, paid length), so those functions have their own unit tests.
 
 ## The free Gurobi licence
 
