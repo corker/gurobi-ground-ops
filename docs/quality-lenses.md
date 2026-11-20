@@ -36,8 +36,8 @@ Apply the first group to every feature, then the groups that match what the feat
 | 3 | **Reproducibility** | Same inputs, same machine, same Gurobi version: same result? Are the solver settings and build order in AGENTS.md: Tests followed, and is `uv.lock` committed? | [Gurobi determinism article](https://support.gurobi.com/hc/en-us/articles/360031636051); [uv docs](https://docs.astral.sh/uv/concepts/projects/layout/) |
 | 4 | **Code quality** | Is it the simplest version that meets the requirement, in scope, readable top to bottom, with one reason to change per module and no duplicate abstractions? See AGENTS.md: How to write code, Do NOT build. | ISO: maintainability; Google: design, complexity, naming |
 | 5 | **Tests** | Does every behaviour have a test that asserts on behaviour, at the right level, deterministically? See AGENTS.md: Tests. | ISO: testability; Google: tests |
-| 6 | **Installability** | Does `uv sync && uv run pytest` work on a clean machine with no licence, no collector and no network? | ISO: flexibility (installability); AGH's CPLEX dependency |
-| 7 | **Security** | Are licence files and secrets kept out of git? Are dependencies pinned? Does any code read untrusted input? Currently none should. | ISO: security |
+| 6 | **Installability** | Does `uv sync && uv run pytest` work on a clean machine with no licence, no collector, no network, no Docker and no Node? | ISO: flexibility (installability); AGH's CPLEX dependency |
+| 7 | **Security** | Are licence files and secrets kept out of git? Are dependencies pinned? Is untrusted input confined to the API (lens 18)? | ISO: security |
 | 8 | **Documentation** | Would a backend engineer understand the feature cold in six months? Are modelling choices recorded in the README rather than in code comments? | Google: documentation |
 | 9 | **Honesty and licensing** | Is every claim verified, or labelled unverified, and every Gurobi API checked with its URL cited? No unmeasured numbers? Are new dependencies' licences compatible with MIT? See AGENTS.md: Hard rules. | Repo purpose |
 
@@ -52,10 +52,20 @@ Apply the first group to every feature, then the groups that match what the feat
 
 | # | Lens | Questions | Origin |
 | --- | --- | --- | --- |
-| 12 | **Observability** | Do the metrics alone show what the solve did: gap, incumbent, bound, incumbent improvements, nodes, iterations, elapsed time? Are names namespaced and lowercase, with UCUM units (`s`) and low-cardinality attributes? Does the stdout fallback show the same values? Do the final emitted values equal the model's final attributes? | Repo purpose; [OpenTelemetry conventions](https://opentelemetry.io/docs/specs/semconv/general/metrics/); the gap gurobi-logtools leaves |
+| 12 | **Observability** | Do the metrics alone show what the solve did: gap, incumbent, bound, incumbent improvements, nodes, iterations, elapsed time? Are names namespaced and lowercase, with UCUM units (`s`)? Are attributes low-cardinality, with one ID per run, unique across processes, on active-only instruments with an explicit cap (D21)? Does the stdout fallback show the same values? Do the final emitted values equal the model's final attributes? | Repo purpose; [OpenTelemetry conventions](https://opentelemetry.io/docs/specs/semconv/general/metrics/); the gap gurobi-logtools leaves |
 | 13 | **Measurement discipline** | Is any timing comparison, such as warm start versus cold start, repeated across several `Seed` values, with the spread reported? Are the machine, Gurobi version and parameters stated? | [Gurobi on comparisons](https://support.gurobi.com/hc/en-us/articles/26992650628369) |
 | 14 | **Solver independence** | Does the same test suite pass on both backends? Does a backend that lacks a capability, such as IIS, say so in its result instead of faking it? | ISO: flexibility (replaceability) |
 | 15 | **Usability of outputs** | Is the IIS report readable without knowing Gurobi? Is the stdout telemetry readable while the solve runs? Do public functions take and return plain dataclasses? | ISO: interaction capability |
+
+### API and UI features
+
+| # | Lens | Questions | Origin |
+| --- | --- | --- | --- |
+| 16 | **API contract** | Does every solver status (optimal, limit reached, infeasible, interrupted) map to exactly one API status that the UI handles? Does a missing run return 404 before any stream starts? Are the TypeScript types generated from the OpenAPI schema? | Repo purpose; D17, D20 |
+| 17 | **Concurrency safety** | Does each run get its own Gurobi environment, created and freed under one lock (D17)? Is shared state (the run table, the samples) guarded? Can a cancel race with a run that has just finished? | [Gurobi race conditions](https://support.gurobi.com/hc/en-us/articles/40912136522129); Google: parallel programming |
+| 18 | **Input safety** | Is every request validated, and is an instance over the free-licence size rejected before it's built? Does the API bind to `127.0.0.1` only? | ISO: security |
+| 19 | **Solution inspection** | Can a non-modeller judge from the views alone whether the answer makes operational sense: who works when, where the overtime comes from, which tasks and handlers clash? | Repo purpose: formulation vs operational questions |
+| 20 | **Basic accessibility** | Semantic HTML, keyboard-reachable controls, readable contrast, and charts with a text label? | ISO: interaction capability (inclusivity) |
 
 ## Considered and out of scope
 
@@ -69,8 +79,7 @@ These lenses matter in related work, but not for this repo's purpose. If the sco
 | Scale (hundreds of flights, decomposition, learned search) | AGH, branch-and-price papers | Instances must fit the free licence. |
 | Uncertainty (stochastic demand, delays) | Disruption-management literature | Deterministic textbook models only. |
 | Safety | ISO: safety | Synthetic data that drives no real people or equipment. |
-| Availability, scalability of a service | ISO: reliability, flexibility | Local, single-user, run on demand. |
-| UI, accessibility, inclusivity | ISO: interaction capability | No UI, by design. |
-| Concurrency safety | Google: parallel programming | The repo's own code must stay single-threaded. Gurobi's threading is covered under reproducibility. |
+| Availability, scalability of a service | ISO: reliability, flexibility | Local, single-user, run on demand. Runs are lost on restart. |
+| Authentication and multi-user state | ISO: security | Bound to `127.0.0.1`; one user. |
 | Privacy | ISO: security | No personal data. Generated IDs only, never real names. |
 | Cost, sustainability, internationalisation | Common architecture frameworks | No hosted infrastructure, no spend, English only. |

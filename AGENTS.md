@@ -1,6 +1,6 @@
 # Agent instructions: gurobi-ground-ops
 
-A small public repo for learning Gurobi (MIP solver) on airport ground-operations problems: handler→task assignment and shift-coverage set covering. The models are textbook. The real deliverable is what surrounds the solve: solver telemetry, deterministic tests, time limits, warm starts and infeasibility diagnosis.
+A small public repo for learning Gurobi (MIP solver) on airport ground-operations problems: handler→task assignment and shift-coverage set covering. The models are textbook. The real deliverable is what surrounds the solve: solver telemetry, deterministic tests, effort limits, warm starts and infeasibility diagnosis. Optional layers sit on top of the core library: an LGTM observability stack in Docker Compose, a FastAPI service with SSE progress, and a React UI. The core never depends on them.
 
 The owner is a backend/platform engineer, **not an optimisation modeller**. Nothing in the repo may suggest otherwise.
 
@@ -11,7 +11,8 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 - **No performance claims or benchmark numbers that haven't been measured.** Any timing reported must come from a real run, with the machine and solver settings stated.
 - Never claim tests pass without running them and showing the real output.
 - Every instance must solve within the **free pip-installed gurobipy licence size limit**, so `uv sync && uv run pytest` works with no licence. If an instance doesn't fit, shrink it. Nothing may require a paid or academic licence.
-- All tests must pass with no OpenTelemetry collector running; telemetry falls back to stdout.
+- All tests must pass with no OpenTelemetry collector running; telemetry falls back to stdout. `uv run pytest` must need no Docker, no Node and no browser.
+- Call `model.update()` before reading model size (`NumVars`, `NumConstrs`) or calling `copy()` or `relax()`. gurobipy applies changes lazily, so before `update()` the size reads 0 and a copy or relaxation is missing the pending constraints.
 
 ## Conventions
 
@@ -19,6 +20,8 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 - Python 3.12+. Type hints on all function signatures.
 - Flat package layout. No sub-packages unless a file exceeds ~500 lines. Reproducible experiment scripts live in a top-level `experiments/` directory, outside the package.
 - Project docs live in `docs/`: `related-work.md` for existing projects and literature, `quality-lenses.md` for the checks every feature must pass, `plan.md` for what to build and when each step is done, `design-decisions.md` for decisions with their evidence and confidence, plus design docs as they're written.
+- The UI lives in `ui/`: React, Vite and strict TypeScript, managed with `npm`, tested with Vitest and Testing Library, linted with oxlint. Node is needed only for the UI. TypeScript types for API payloads are generated from FastAPI's OpenAPI schema, not written by hand.
+- The API lives under `/api` and binds to `127.0.0.1` only. A streaming endpoint checks that the run exists before it starts streaming.
 - MIT licence.
 
 ## How to write code
@@ -106,10 +109,11 @@ When a verification fails, fix it and re-verify before reporting done.
 
 ## Do NOT build
 
-- No FastAPI service, HTTP API or job queue.
-- No Sudoku, N-queens or puzzle demos.
-- No Docker, Kubernetes or CI/CD (single developer, local only).
-- No web UI, dashboard or notebook.
+- No job queue, database, authentication or multi-user state. Runs live in memory and are lost on restart.
+- No container for the app itself. Docker Compose runs only the `grafana/otel-lgtm` observability stack.
+- No Kubernetes, CI/CD or cloud deployment (single developer, local only).
+- No WebSockets. Progress is pushed over SSE; everything else is plain requests.
+- No notebooks, and no Sudoku, N-queens or puzzle demos.
 - No models beyond the two above.
 
 ## README framing (non-negotiable opening)

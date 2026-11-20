@@ -15,7 +15,7 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 | 3 | Model 1 no-overlap constraints | Pairwise constraints in the package; the clique form as a documented experiment | High (85%) |
 | 4 | Making the search visible | Document that instances solve at the root; demos and early-stop tests use `Presolve=0, Cuts=0` | High (90%) |
 | 5 | Fallback backend | HiGHS via `highspy` (accepted) | High (90%) |
-| 6 | Telemetry metrics and instruments | A core set every backend reports, plus named optional fields; synchronous gauges and counters | High (85%) |
+| 6 | Telemetry metrics and instruments | A core set every backend reports, plus named optional fields; observable gauges for active runs (D21) | High (85%) |
 | 7 | Early-stop test | An effort limit (`WorkLimit` on Gurobi), asserting the shared "limit reached, feasible" status and a non-zero gap | High (95%) |
 | 8 | Warm start | `Start` attribute; report work units across seeds; expect a small effect | Medium (80%) |
 | 9 | Infeasibility diagnosis | Gurobi IIS; the fallback reports the capability as unavailable | High (90%) |
@@ -25,6 +25,12 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 | 13 | Log walkthrough | `docs/reading-the-log.md`, built from a real log produced by this repo | High (85%) |
 | 14 | Experiment journal | Scripts in `experiments/`, results in `docs/experiments.md` (accepted) | High (90%) |
 | 15 | Where the bound comes from | Teach it through decisions 3 and 4, with no extra code | High (85%) |
+| 16 | Observability stack | `grafana/otel-lgtm` in Docker Compose; OTLP over HTTP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, stdout otherwise | High (85%) |
+| 17 | API | FastAPI under `/api` on `127.0.0.1`; one Gurobi environment per run; cancel through `terminate()` | High (85%) |
+| 18 | Progress transport | SSE for progress; plain requests for everything else | High (85%) |
+| 19 | UI library | React with Vite and TypeScript | Medium (75%) |
+| 20 | UI serving and API types | Vite dev proxy while developing; FastAPI serves the built UI; types generated with openapi-typescript | Medium (80%) |
+| 21 | Run identity in telemetry | A `run_id` unique across processes, as a metric attribute on observable gauges for active runs only, with a raised cap | High (85%) |
 
 ## 1. gurobipy version and licence
 
@@ -132,7 +138,7 @@ Gurobi codes are from the [callback codes reference](https://docs.gurobi.com/pro
 
 Instruments, measured with `InMemoryMetricReader` on SDK 1.45.2: a synchronous gauge (`create_gauge`) for gap, incumbent, bound, nodes and iterations, and a counter for improvements. Both export correctly. On the callback itself, Model 1 (T=30, seeds 0–2) took identical work and node counts with and without it, and runtime changed by −2% to +4%. The final sample matched `ObjVal`, `ObjBound` and `NodeCount` exactly. Names: OpenTelemetry's registry has no `solver` namespace, and its rules ask for lowercase, dot-separated, namespaced names with UCUM units ([naming](https://opentelemetry.io/docs/specs/semconv/general/naming/)).
 
-**Recommendation.** The core set plus optional fields. Synchronous instruments recorded from the callback, throttled by elapsed time. A project prefix, for example `groundops.solver.gap`, avoids a future clash. A `solver.backend` attribute.
+**Recommendation.** The core set plus optional fields. The callback writes the latest values, throttled by elapsed time, and observable gauges report them for active runs only (D21 explains why not synchronous gauges). A project prefix, for example `groundops.solver.gap`, avoids a future clash. A `solver.backend` attribute.
 
 **Confidence: High (85%).** Measured for Gurobi. HiGHS's improving-solution callback fired; its interrupt-callback sampling rate wasn't measured.
 
@@ -253,6 +259,111 @@ Measured on Model 1 (T=30): with only the cover constraints, the LP relaxation w
 **Recommendation.** Teach it through the log walkthrough and the experiment journal. No extra code is needed.
 
 **Confidence: High (85%).**
+
+## 16. Observability stack
+
+Measured on 2026-11-20 with `grafana/otel-lgtm:0.41.1` and opentelemetry-sdk 1.45.2: callback metrics exported over OTLP/HTTP to port 4318 arrived in Prometheus, and Grafana's Prometheus data source returned them. The image bundles an OpenTelemetry Collector, Prometheus, Tempo, Loki, Pyroscope and Grafana, and is "intended for development, demo, and testing environments" ([LGTM README](https://github.com/grafana/docker-otel-lgtm)).
+
+Observed details that shape the design:
+
+- With `OTEL_EXPORTER_OTLP_ENDPOINT` unset, the SDK's HTTP exporter still defaults to `http://localhost:4318/v1/metrics`. "Unset means stdout" must therefore be explicit code in this repo.
+- Prometheus renames metrics: dots become underscores and the unit becomes a suffix. `groundops.solver.gap` with unit `1` is queried as `groundops_solver_gap_ratio`, and unit `min` adds `_minutes`.
+- Grafana is coarse for short solves. With a 500 ms export interval, the first half-second of a 3.7-second solve (bound 0 and 15) never reached Prometheus. At 1-second query resolution the bound showed 35 then 55. The SSE stream (D18) is the fine-grained view; Grafana is the overview.
+
+| Option | Pros | Cons |
+| --- | --- | --- |
+| **`grafana/otel-lgtm`, one container** | Metrics, traces, logs and dashboards with one `docker compose up` | Not for production (by its own README); Prometheus is coarse for sub-second detail |
+| Separate collector, Prometheus, Tempo, Loki and Grafana containers | Closer to a real deployment | Five services to configure for a local learning tool |
+| No stack; stdout only | Nothing to run | No dashboards, which the confirmed scope includes |
+
+**Recommendation.** One `grafana/otel-lgtm` service in `compose.yaml`, with the dashboard provisioned as JSON. The app runs on the host, not in a container.
+
+**Confidence: High (85%)** for metrics. Traces and Gurobi log lines in Loki (through the `MESSAGE` callback's `MSG_STRING`) aren't measured yet. **To raise it:** export one span and one log line to the same container and query them in Tempo and Loki.
+
+## 17. API
+
+Measured with the free licence: two solves in parallel threads, each with its own environment, both completed (3.9 s each, 3.96 s wall clock). `terminate()` called from another thread after 0.5 s ended the solve with status `INTERRUPTED`, keeping the incumbent and a gap of 0.364. Gurobi's documented rule ([race conditions article](https://support.gurobi.com/hc/en-us/articles/40912136522129)) is that creating and freeing environments isn't thread-safe; using one environment per thread is. `terminate()` "can be called at any time during an optimization (from a callback, from another thread…)" ([Model API](https://docs.gurobi.com/projects/optimizer/en/current/reference/python/model.html)).
+
+Two bugs found in the spike, which become rules:
+
+- `model.copy()` before `update()` copied an empty model, so the solve "finished" instantly with objective 0. (`AGENTS.md` now requires `update()` first.)
+- A streaming endpoint returned `200 text/event-stream` for a run that didn't exist, because the response starts before the generator body runs. The existence check must happen before streaming starts.
+
+| Option | Pros | Cons |
+| --- | --- | --- |
+| **FastAPI 0.165.0 (MIT)** | Native SSE since 0.135.0; OpenAPI schema for type generation; `TestClient` | One more dependency |
+| Starlette directly | Smaller | Hand-written SSE and no generated schema |
+| No API; CLI only | Simplest | No cancel from the UI; no live progress |
+
+**Recommendation.** FastAPI under `/api`, bound to `127.0.0.1`, no auth. Endpoints: `POST /api/runs`, `GET /api/runs/{id}`, `GET /api/runs/{id}/events`, `POST /api/runs/{id}/cancel`. Runs execute in a thread pool. Each run gets its own environment. Creating and freeing environments happens under one process-wide lock, because Gurobi documents both as not thread-safe and FastAPI runs sync handlers on pool threads. The spike created environments on the request thread without a lock, which is safe only while requests don't overlap. Two workers; when both are busy, `POST /api/runs` returns 429. Runs are kept in memory. Cancel on HiGHS would use its MIP interrupt callback (`kCallbackMipInterrupt`, present in highspy 1.16); that is not measured yet.
+
+**Confidence: High (85%)** for Gurobi, measured in a spike. **To raise it:** test HiGHS cancellation through the interrupt callback, and two overlapping `POST /api/runs` requests under the lock.
+
+## 18. Progress transport
+
+Measured against a running server: 20 progress events over 3.7 seconds for a full solve (throttled to one per 0.2 s), then `done: optimal`. By 0.21 s the incumbent had fallen from 405 to 55 (the optimum) and the bound had risen from 0 to 35; the bound reached 55 at 3.68 s. A cancelled run sent 7 events, then `done: interrupted`. Through Vite's dev proxy the events still arrived spread over 3.7 seconds (21 events), so the proxy doesn't buffer them. A pytest `TestClient` test that reads the stream until `done` passes. FastAPI's SSE support is documented at [Server-Sent Events](https://fastapi.tiangolo.com/tutorial/server-sent-events/).
+
+| Option | Pros | Cons |
+| --- | --- | --- |
+| Polling | Simplest server | Up to one interval stale; timer code in the UI |
+| **SSE** | Server push; browser `EventSource` reconnects automatically; `Last-Event-ID` for resuming | `EventSource` only does GET, so cancel stays a separate POST |
+| WebSockets | Two-way | More than needed; reconnection is hand-written |
+
+**Recommendation.** SSE for progress. The solver thread appends samples and wakes the stream through a `threading.Condition`. On reconnect, resume from `Last-Event-ID`. The spike replayed all events instead, which is a small fix still to write.
+
+**Confidence: High (85%).**
+
+## 19. UI library
+
+Measured by building the same Run view in both libraries: it polls a mocked API, shows gap, incumbent and bound, has a Cancel button and an SVG chart, and has the same two behaviour tests.
+
+| Measured | React 19.3.1 | Vue 3.5.46 |
+| --- | --- | --- |
+| Component code | 57 lines | 62 lines |
+| Behaviour tests | 28 lines, 2 of 2 pass | 32 lines, 2 of 2 pass |
+| Type error in markup caught at build | Yes | Yes, including in templates |
+| TypeScript in the Vite template | 7.0.2 | 6.0.3 (pinned for `vue-tsc`) |
+| Installed packages, total / runtime | 114 / 6 | 222 / 27 |
+| Production bundle, gzipped | 69 kB | 26 kB |
+
+Svelte, Solid and Preact were compared on adoption only: npm weekly downloads of 10M, 13M and 63M, against React's 275M and Vue's 27M.
+
+**Recommendation.** React with Vite 8 and TypeScript. The code is equally clear in both. React wins on a smaller dependency tree, current TypeScript, and how reliably AI agents generate it. Vue's smaller bundle doesn't matter for a local app. The Vite React template ships oxlint and strict TypeScript, and the spike's tests used Vitest with Testing Library; `AGENTS.md` adopts those.
+
+**Confidence: Medium (75%).** This is close to a matter of taste. **To raise it:** nothing more to measure. Revisit only if the UI grows well beyond three pages.
+
+## 20. UI serving and API types
+
+Measured: FastAPI served the built UI. A catch-all route returning `index.html` let a client-side route like `/runs/7` load the app instead of returning 404, and the API under `/api` didn't collide with it. Vite's dev server listened on `localhost` by default, and a client connecting to `127.0.0.1:5173` was refused; started with `--host 127.0.0.1`, it worked. The proxy target `http://127.0.0.1:8765` reached the API either way. Why `localhost` didn't answer on `127.0.0.1` wasn't investigated. With typed SSE models, openapi-typescript 7.13.0 generated a `Progress` type, but typed the stream response itself as `unknown`.
+
+| Option | Pros | Cons |
+| --- | --- | --- |
+| **Vite dev server and proxy while developing; FastAPI serves `ui/dist` for a single-command run** | Fast UI iteration, plus one process to run | The build output must exist before `serve` |
+| Vite dev server only | Simplest | Two processes every time |
+| FastAPI only | One process | No hot reload while developing |
+
+**Recommendation.** The first option. The build output stays out of git. TypeScript types come from the OpenAPI schema; the SSE payload type is wired to the stream in one place in the UI.
+
+**Confidence: Medium (80%).** The serving part is measured (90%). The SSE payload type needing a hand-written link lowers the total.
+
+## 21. Run identity in telemetry
+
+Measured with opentelemetry-sdk 1.45.2's in-memory reader, plus one run against LGTM:
+
+| # | Option | Result | Verdict |
+| --- | --- | --- | --- |
+| 1 | No run label on metrics; `run_id` on traces only | Two concurrent runs overwrote each other on one series | Reject |
+| 2 | `run_id` on a synchronous gauge | Finished runs kept exporting their last value forever; after 2,000 runs the SDK's default cap (`_DEFAULT_CARDINALITY_LIMIT = 2000`) folded new data into an `otel.metric.overflow` series | Reject |
+| 3 | **`run_id` on an observable gauge reporting active runs only, cap raised with `View(aggregation_cardinality_limit=…)`** | Finished runs dropped out at the next collection; 5,000 runs, no overflow; concurrent runs on separate series | **Recommended** |
+| 4 | Worker-slot label, with a time-window link per run | Bounded series, no overflow, but between runs Prometheus still returned the previous run's last value, so a run's window could start with its predecessor's data | Second choice |
+| 5 | Exemplars linking metric points to traces | Not tested; needs exemplar storage enabled | Too complex for now |
+| 6 | Progress as structured logs in Loki | Not tested; plotting needs LogQL `unwrap` | Too complex for now |
+
+Even with an observable gauge, the default cap still overflowed after 2,000 runs, because the SDK keeps every attribute set it has seen. That's why option 3 needs the raised cap.
+
+**Recommendation.** Option 3. The run ID is the process start time plus a counter (for example `1795203617-3`), so it stays unique when each CLI run is its own process. A plain counter would restart at 1 in every process and put every CLI run on the same series. Grafana filters on `run_id`. This changes lens 12 from "no per-run IDs" to "one ID per run, unique across processes, on active-only instruments, with an explicit cap".
+
+**Confidence: High (85%).** Measured. The open question is Prometheus with many short-lived series over long periods, which doesn't affect a local tool.
 
 ## Know about, don't build
 
