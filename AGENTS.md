@@ -17,8 +17,8 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 
 - `uv` for dependencies and for running everything. Never `pip install`.
 - Python 3.12+. Type hints on all function signatures.
-- Flat package layout. No sub-packages unless a file exceeds ~500 lines.
-- Project docs live in `docs/`: `related-work.md` for existing projects and literature, `quality-lenses.md` for the checks every feature must pass, plus design docs and implementation plans as they're written.
+- Flat package layout. No sub-packages unless a file exceeds ~500 lines. Reproducible experiment scripts live in a top-level `experiments/` directory, outside the package.
+- Project docs live in `docs/`: `related-work.md` for existing projects and literature, `quality-lenses.md` for the checks every feature must pass, `design-decisions.md` for decisions with their evidence and confidence, plus design docs and implementation plans as they're written.
 - MIT licence.
 
 ## How to write code
