@@ -150,3 +150,10 @@ def test_work_limit_option_stops_the_solve_early(capsys: pytest.CaptureFixture[s
 def test_a_negative_work_limit_is_reported_on_stderr(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["cover", "--work-limit", "-1"]) == 2
     assert "work limit must be zero or more" in capsys.readouterr().err
+
+
+def test_serve_binds_the_api_to_localhost_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr("uvicorn.run", lambda _app, **options: calls.append(options))
+    assert main(["serve", "--port", "8123"]) == 0
+    assert calls == [{"host": "127.0.0.1", "port": 8123}]

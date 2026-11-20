@@ -2,7 +2,7 @@
 
 I'm a backend/platform engineer picking up Gurobi — I'm not an optimisation modeller. The models here are small and textbook, chosen because airport ground operations has the clearest real-world assignment and covering problems. The part I care about is what surrounds the solve: telemetry, deterministic tests, time limits, warm starts, infeasibility diagnosis.
 
-> **Status: Steps 1 to 7 of 9 done:** project setup, both models with their CLI commands, solver telemetry, the observability stack, the operational edges (early stop, warm start, infeasibility diagnosis, reproducibility), and the required test set. Everything else below is planned. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
+> **Status: Steps 1 to 8 of 9 done:** project setup, both models with their CLI commands, solver telemetry, the observability stack, the operational edges (early stop, warm start, infeasibility diagnosis, reproducibility), the required test set, and the HTTP API with live progress. The UI (Step 9) is planned. Everything else below is planned. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
 
 ## What it does (planned)
 
@@ -49,7 +49,7 @@ The difference between them is the **gap**. When the gap closes, the solver has 
 ```
 
 - **Core library (Python):** seeded instance generators, the two models, and the Gurobi solve. A solver callback emits the gap, incumbent, bound, incumbent improvements, node count, simplex iterations, elapsed time and work units.
-- **Telemetry:** OpenTelemetry metrics, plus traces and logs. They go over OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set; when it isn't, nothing is exported. Metric export has been tested in a spike; traces and logs haven't yet.
+- **Telemetry:** OpenTelemetry metrics, plus traces and logs. They go over OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set; when it isn't, nothing is exported. The opt-in integration tests check all three against a real `grafana/otel-lgtm` container.
 - **Observability stack:** one [`grafana/otel-lgtm`](https://github.com/grafana/docker-otel-lgtm) container in Docker Compose, with a provisioned dashboard. The image is intended for development, demo and testing.
 - **API:** FastAPI on `127.0.0.1`. Start a run, stream its progress over server-sent events, cancel it, fetch the result. Runs live in memory.
 - **UI:** React, Vite and TypeScript, in three pages: new run, live run, result.
@@ -146,6 +146,26 @@ If the endpoint is set but nothing is listening, the run still completes, but th
 ```sh
 uv run pytest -m integration
 ```
+
+### The HTTP API
+
+`ground-ops serve` runs the API on `127.0.0.1:8000` (`--port` to change it). It listens on localhost only and has no authentication. Runs live in memory and are lost when it stops. FastAPI serves the generated OpenAPI schema at `/docs`.
+
+```sh
+uv run ground-ops serve
+curl -s -X POST localhost:8000/api/runs -H 'content-type: application/json' \
+  -d '{"model": "assignment", "tasks": 40, "seed": 1, "expose_search": true}'
+curl -sN localhost:8000/api/runs/<id>/events
+```
+
+| Endpoint | What it does |
+| --- | --- |
+| `POST /api/runs` | Starts a run: `model` (`assignment` or `coverage`), `tasks`, `handlers`, `seed`, `expose_search`, `work_limit`. Returns 202 with the run. An invalid request, or one too big for the free licence, is refused with 422 before anything is built. With two runs already going, it returns 429. |
+| `GET /api/runs/{id}` | The run: its instance, latest progress, and the result once it ends |
+| `GET /api/runs/{id}/events` | Server-sent events: `progress` at most every 0.2 s, a final `progress`, then `done` with the status. A reconnecting client sends `Last-Event-ID` and gets only the events after it. |
+| `POST /api/runs/{id}/cancel` | Stops the run at the solver's next callback; the result is `interrupted`, with the best schedule found so far. 409 if the run has already ended. |
+
+A run that doesn't exist is a 404 on every endpoint, before any stream starts. A run ends with one of the four solver statuses (`optimal`, `limit reached`, `infeasible`, `interrupted`), or as `failed` with an error message if the solve stops any other way. With `OTEL_EXPORTER_OTLP_ENDPOINT` set, each run is exported like a CLI run, and its API id is its `run_id` in Grafana.
 
 ### Stopping early, warm starts, infeasibility, reproducibility
 

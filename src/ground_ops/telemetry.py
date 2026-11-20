@@ -6,6 +6,7 @@ which is why its modules are underscore-prefixed; traces and metrics are stable.
 
 import itertools
 import os
+import threading
 import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, contextmanager
@@ -24,7 +25,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-from ground_ops.progress import Progress, ProgressRecorder
+from ground_ops.progress import Progress, ProgressRecorder, ProgressSink
 
 PROCESS_START = int(time.time())
 _run_numbers = itertools.count(1)
@@ -45,6 +46,11 @@ METRICS: tuple[tuple[str, str, Callable[[Progress], float | None]], ...] = (
     ("elapsed", "s", lambda p: p.elapsed),
     ("work", "{work_unit}", lambda p: p.work),
 )
+
+
+def new_run_id() -> str:
+    """Unique across processes: the process start time, the process id, and a count within the process."""
+    return f"{PROCESS_START}-{os.getpid()}-{next(_run_numbers)}"
 
 
 class Telemetry:
@@ -77,9 +83,18 @@ class Telemetry:
         return observe
 
     @contextmanager
-    def run(self, model: str) -> Iterator[ProgressRecorder]:
-        """Report a solve while it runs. The final values are flushed before the run stops being reported."""
-        run_id = f"{PROCESS_START}-{os.getpid()}-{next(_run_numbers)}"
+    def run(
+        self,
+        model: str,
+        run_id: str,
+        *,
+        on_progress: ProgressSink | None = None,
+        stop: threading.Event | None = None,
+    ) -> Iterator[ProgressRecorder]:
+        """Report a solve while it runs. The final values are flushed before the run stops being reported.
+
+        `on_progress` and `stop` are passed to the run's recorder.
+        """
         labels = {"run_id": run_id, "model": model}
 
         def start_span(name: str) -> AbstractContextManager[object]:
@@ -88,7 +103,9 @@ class Telemetry:
         def on_log_line(line: str) -> None:
             self._logger.emit(body=line, attributes=labels, severity_number=SeverityNumber.INFO)
 
-        recorder = ProgressRecorder(run_id, start_span=start_span, on_log_line=on_log_line)
+        recorder = ProgressRecorder(
+            run_id, start_span=start_span, on_log_line=on_log_line, on_progress=on_progress, stop=stop
+        )
         key = (run_id, model)
         try:
             with self._tracer.start_as_current_span("ground-ops run", attributes=labels):

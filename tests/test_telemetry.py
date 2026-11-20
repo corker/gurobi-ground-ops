@@ -10,7 +10,7 @@ from ground_ops.model1 import build_model, solve_assignment
 from ground_ops.model2 import solve_coverage
 from ground_ops.progress import Progress, ProgressRecorder
 from ground_ops.solver import SolverSettings, gurobi_env
-from ground_ops.telemetry import PROCESS_START, export_interval_ms, telemetry_from_environment
+from ground_ops.telemetry import PROCESS_START, export_interval_ms, new_run_id, telemetry_from_environment
 from tests.support import InMemoryTelemetry
 
 METRIC_NAMES = {
@@ -97,7 +97,7 @@ def test_a_run_exports_every_metric_with_its_final_values_then_stops_being_repor
     in_memory: InMemoryTelemetry,
 ) -> None:
     reader = in_memory.metrics
-    with in_memory.telemetry.run("assignment") as recorder:
+    with in_memory.telemetry.run("assignment", new_run_id()) as recorder:
         result = solve_assignment(
             generate_assignment(30, seed=1), recorder=recorder, settings=SolverSettings(expose_search=True)
         )
@@ -114,7 +114,7 @@ def test_a_run_exports_every_metric_with_its_final_values_then_stops_being_repor
 def test_run_ids_are_unique_and_start_with_the_process_start_time(in_memory: InMemoryTelemetry) -> None:
     ids = []
     for _ in range(3):
-        with in_memory.telemetry.run("coverage") as recorder:
+        with in_memory.telemetry.run("coverage", new_run_id()) as recorder:
             ids.append(recorder.run_id)
     assert len(set(ids)) == 3
     assert all(i.startswith(f"{PROCESS_START}-{os.getpid()}-") for i in ids)
@@ -145,7 +145,7 @@ def test_a_log_file_is_written_and_nothing_goes_to_the_console(
 
 
 def test_a_run_traces_each_phase_under_one_root_span(in_memory: InMemoryTelemetry) -> None:
-    with in_memory.telemetry.run("assignment") as recorder:
+    with in_memory.telemetry.run("assignment", new_run_id()) as recorder:
         solve_assignment(generate_assignment(10, seed=1), recorder=recorder)
 
     spans = {span.name: span for span in in_memory.spans.get_finished_spans()}
@@ -161,7 +161,7 @@ def test_a_run_traces_each_phase_under_one_root_span(in_memory: InMemoryTelemetr
 
 
 def test_gurobi_log_lines_are_exported_with_the_run_id_and_trace(in_memory: InMemoryTelemetry) -> None:
-    with in_memory.telemetry.run("coverage") as recorder:
+    with in_memory.telemetry.run("coverage", new_run_id()) as recorder:
         solve_coverage(generate_coverage(seed=1), recorder=recorder)
 
     root = next(s for s in in_memory.spans.get_finished_spans() if s.name == "ground-ops run")
@@ -174,7 +174,7 @@ def test_gurobi_log_lines_are_exported_with_the_run_id_and_trace(in_memory: InMe
 
 
 def test_an_infeasible_run_traces_the_iis_computation(in_memory: InMemoryTelemetry) -> None:
-    with in_memory.telemetry.run("assignment") as recorder:
+    with in_memory.telemetry.run("assignment", new_run_id()) as recorder:
         solve_assignment(generate_assignment(10, seed=1, n_handlers=2), recorder=recorder)
 
     assert {span.name for span in in_memory.spans.get_finished_spans()} == {

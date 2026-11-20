@@ -11,7 +11,7 @@ from ground_ops.model1 import solve_assignment
 from ground_ops.model2 import solve_coverage
 from ground_ops.progress import ProgressRecorder, phase
 from ground_ops.solver import SolverSettings
-from ground_ops.telemetry import telemetry_from_environment
+from ground_ops.telemetry import new_run_id, telemetry_from_environment
 
 
 def _clock(minutes: int) -> str:
@@ -92,11 +92,25 @@ def _with_telemetry[T](model: str, solve: Callable[[ProgressRecorder | None], T]
     if telemetry is None:
         return solve(None)
     try:
-        with telemetry.run(model) as recorder:
+        with telemetry.run(model, new_run_id()) as recorder:
             print(f"ground-ops: exporting telemetry for run_id {recorder.run_id}", file=sys.stderr)
             return solve(recorder)
     finally:
         telemetry.shutdown()
+
+
+def _serve(port: int) -> None:
+    # Imported here so the solve and cover commands never load the web stack.
+    import uvicorn
+
+    from ground_ops.api import create_app
+
+    telemetry = telemetry_from_environment()
+    try:
+        uvicorn.run(create_app(telemetry), host="127.0.0.1", port=port)
+    finally:
+        if telemetry is not None:
+            telemetry.shutdown()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -119,7 +133,12 @@ def main(argv: list[str] | None = None) -> int:
         "--handlers", type=int, help="number of handlers (default: one more than the most tasks that overlap)"
     )
     commands.add_parser("cover", parents=[solver_options], help="solve a seeded Model 2 instance and print the roster")
+    serve = commands.add_parser("serve", help="run the HTTP API on 127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000, help="port to listen on (default: 8000)")
     args = parser.parse_args(argv)
+    if args.command == "serve":
+        _serve(args.port)
+        return 0
     settings = SolverSettings(log_file=args.log, expose_search=args.expose_search, work_limit=args.work_limit)
 
     try:

@@ -17,7 +17,7 @@ What to build, in order, and when each step counts as done. The rules for *how* 
 | 5 | Observability stack: LGTM in Docker Compose, dashboard, traces, logs | Done |
 | 6 | Operational edges: early stop, warm start, IIS, determinism | Done |
 | 7 | Required test set | Done |
-| 8 | API with live progress | Not started |
+| 8 | API with live progress | Done |
 | 9 | UI | Not started |
 
 Update this table in the same commit that finishes a step.

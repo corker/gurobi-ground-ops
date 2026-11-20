@@ -38,7 +38,7 @@ def solve_coverage(
         with phase(recorder, "build model"):
             model, y = build_model(instance, env)
         with model:
-            check_size(model)
+            check_size(model.NumVars, model.NumConstrs)
             with phase(recorder, "solve"):
                 model.optimize(recorder)
             if recorder is not None:
@@ -54,6 +54,8 @@ def _result(model: gp.Model, y: gp.tupledict[int, gp.Var]) -> Result:
             status = Status.OPTIMAL
         case GRB.WORK_LIMIT:
             status = Status.LIMIT_REACHED
+        case GRB.INTERRUPTED:
+            status = Status.INTERRUPTED
         case code:
             raise RuntimeError(f"Gurobi stopped with status code {code}, which this version doesn't handle yet.")
     # Before the first bound or incumbent, Gurobi reports them as infinite.

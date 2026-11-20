@@ -17,6 +17,13 @@ from ground_ops.progress import ProgressRecorder, phase
 from ground_ops.solver import DEFAULT_SETTINGS, SolverSettings, check_size, gurobi_env
 
 
+def model_size(instance: AssignmentInstance) -> tuple[int, int]:
+    """The variables and constraints build_model creates, counted without Gurobi so a request can be refused early."""
+    conflicts = sum(conflict(a, b) for a, b in combinations(instance.tasks, 2))
+    n_handlers = len(instance.handlers)
+    return n_handlers * len(instance.tasks), len(instance.tasks) + conflicts * n_handlers
+
+
 def build_model(instance: AssignmentInstance, env: gp.Env) -> tuple[gp.Model, gp.tupledict[tuple[int, int], gp.Var]]:
     model = gp.Model(env=env)
     handler_ids = [h.id for h in instance.handlers]
@@ -50,7 +57,7 @@ def solve_assignment(
         with phase(recorder, "build model"):
             model, x = build_model(instance, env)
         with model:
-            check_size(model)
+            check_size(model.NumVars, model.NumConstrs)
             if start is not None:
                 for (handler_id, task_id), var in x.items():
                     if task_id in start:
@@ -75,6 +82,8 @@ def _result(model: gp.Model, x: gp.tupledict[tuple[int, int], gp.Var]) -> Result
             status = Status.OPTIMAL
         case GRB.WORK_LIMIT:
             status = Status.LIMIT_REACHED
+        case GRB.INTERRUPTED:
+            status = Status.INTERRUPTED
         case code:
             raise RuntimeError(f"Gurobi stopped with status code {code}, which this version doesn't handle yet.")
     # Before the first bound or incumbent, Gurobi reports them as infinite.

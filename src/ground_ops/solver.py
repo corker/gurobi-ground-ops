@@ -3,6 +3,7 @@
 Parameters: https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html
 """
 
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -26,6 +27,9 @@ class SolverSettings:
 
 DEFAULT_SETTINGS = SolverSettings()
 
+# Gurobi: "environment creation and deletion are not thread-safe" (https://support.gurobi.com/hc/en-us/articles/40912136522129).
+_ENV_LOCK = threading.Lock()
+
 
 @contextmanager
 def gurobi_env(settings: SolverSettings) -> Iterator[gp.Env]:
@@ -33,7 +37,9 @@ def gurobi_env(settings: SolverSettings) -> Iterator[gp.Env]:
         raise ValueError(f"can't write the log: {settings.log_file.parent} isn't a directory")
     if settings.work_limit is not None and not settings.work_limit >= 0:
         raise ValueError(f"the work limit must be zero or more work units, got {settings.work_limit}")
-    with gp.Env(empty=True) as env:
+    with _ENV_LOCK:
+        env = gp.Env(empty=True)
+    try:
         if settings.log_file is None:
             env.setParam("OutputFlag", 0)
         else:
@@ -49,14 +55,18 @@ def gurobi_env(settings: SolverSettings) -> Iterator[gp.Env]:
         # One thread and a fixed seed, so the search path doesn't depend on the machine's core count.
         env.setParam("Threads", 1)
         env.setParam("Seed", 0)
-        env.start()
+        with _ENV_LOCK:
+            env.start()
         yield env
+    finally:
+        with _ENV_LOCK:
+            env.dispose()
 
 
-def check_size(model: gp.Model) -> None:
-    """Raise before solving if the model is too big for the licence bundled with gurobipy."""
-    if model.NumVars > FREE_LICENCE_LIMIT or model.NumConstrs > FREE_LICENCE_LIMIT:
+def check_size(n_vars: int, n_constrs: int) -> None:
+    """Raise if a model this big doesn't fit the licence bundled with gurobipy."""
+    if n_vars > FREE_LICENCE_LIMIT or n_constrs > FREE_LICENCE_LIMIT:
         raise ValueError(
-            f"this instance needs {model.NumVars} variables and {model.NumConstrs} constraints; "
+            f"this instance needs {n_vars} variables and {n_constrs} constraints; "
             f"the free Gurobi licence allows {FREE_LICENCE_LIMIT} of each; use a smaller instance, such as fewer tasks"
         )

@@ -48,6 +48,7 @@ class CoverageInstance:
 class Status(StrEnum):
     OPTIMAL = "optimal"
     LIMIT_REACHED = "limit reached"
+    INTERRUPTED = "interrupted"
     INFEASIBLE = "infeasible"
 
 

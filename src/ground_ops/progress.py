@@ -4,6 +4,7 @@ Callback codes: https://docs.gurobi.com/projects/optimizer/en/current/reference/
 """
 
 import math
+import threading
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, replace
@@ -13,6 +14,7 @@ from gurobipy import GRB
 
 type SpanStarter = Callable[[str], AbstractContextManager[object]]
 type LineSink = Callable[[str], None]
+type ProgressSink = Callable[["Progress"], None]
 
 
 @dataclass(frozen=True)
@@ -38,34 +40,53 @@ class Progress:
 class ProgressRecorder:
     """A Gurobi callback that keeps the latest progress of one solve.
 
-    `start_span` opens a trace span for each phase of the run; `on_log_line` receives Gurobi's log lines.
-    Both are optional, so a recorder works without any telemetry backend.
+    `start_span` opens a trace span for each phase of the run; `on_log_line` receives Gurobi's log lines;
+    `on_progress` receives each new progress sample. Setting `stop` asks the solve to end at its next callback.
+    All are optional, so a recorder works without any telemetry backend or API.
     """
 
     def __init__(
-        self, run_id: str, *, start_span: SpanStarter | None = None, on_log_line: LineSink | None = None
+        self,
+        run_id: str,
+        *,
+        start_span: SpanStarter | None = None,
+        on_log_line: LineSink | None = None,
+        on_progress: ProgressSink | None = None,
+        stop: threading.Event | None = None,
     ) -> None:
         self.run_id = run_id
         self.start_span: SpanStarter = start_span or (lambda _: nullcontext())
         self._on_log_line = on_log_line
+        self._on_progress = on_progress
+        self._stop = stop
         self.latest: Progress | None = None
         self._best: float | None = None
         self._improvements = 0
 
+    def _record(self, progress: Progress) -> None:
+        self.latest = progress
+        if self._on_progress is not None:
+            self._on_progress(progress)
+
     def finish(self, model: gp.Model) -> None:
         """Record the final state from the model: the last MIP callback can run before the final bound and incumbent."""
-        self.latest = Progress(
-            elapsed=model.Runtime,
-            work=model.Work,
-            incumbent=model.ObjVal if model.SolCount else None,
-            # Gurobi reports a missing bound as infinite: a solve stopped before the root relaxation, or infeasible.
-            bound=model.ObjBound if math.isfinite(model.ObjBound) else None,
-            nodes=int(model.NodeCount),
-            iterations=int(model.IterCount),
-            improvements=self._improvements,
+        self._record(
+            Progress(
+                elapsed=model.Runtime,
+                work=model.Work,
+                incumbent=model.ObjVal if model.SolCount else None,
+                # Gurobi reports a missing bound as infinite: a solve stopped before the root relaxation, or infeasible.
+                bound=model.ObjBound if math.isfinite(model.ObjBound) else None,
+                nodes=int(model.NodeCount),
+                iterations=int(model.IterCount),
+                improvements=self._improvements,
+            )
         )
 
     def __call__(self, model: gp.Model, where: int) -> None:
+        if self._stop is not None and self._stop.is_set():
+            # Gurobi documents terminate() as callable from a callback; the solve ends with status INTERRUPTED.
+            model.terminate()
         if where == GRB.Callback.MESSAGE:
             # Gurobi delivers its log to this callback even with OutputFlag=0, one line per call.
             line = model.cbGet(GRB.Callback.MSG_STRING).rstrip("\n")
@@ -78,17 +99,19 @@ class ProgressRecorder:
                 self._best = objective
                 self._improvements += 1
                 if self.latest is not None:
-                    self.latest = replace(self.latest, improvements=self._improvements)
+                    self._record(replace(self.latest, improvements=self._improvements))
         elif where == GRB.Callback.MIP:
             best = model.cbGet(GRB.Callback.MIP_OBJBST)
-            self.latest = Progress(
-                elapsed=model.cbGet(GRB.Callback.RUNTIME),
-                work=model.cbGet(GRB.Callback.WORK),
-                incumbent=None if best >= GRB.INFINITY else best,
-                bound=model.cbGet(GRB.Callback.MIP_OBJBND),
-                nodes=int(model.cbGet(GRB.Callback.MIP_NODCNT)),
-                iterations=int(model.cbGet(GRB.Callback.MIP_ITRCNT)),
-                improvements=self._improvements,
+            self._record(
+                Progress(
+                    elapsed=model.cbGet(GRB.Callback.RUNTIME),
+                    work=model.cbGet(GRB.Callback.WORK),
+                    incumbent=None if best >= GRB.INFINITY else best,
+                    bound=model.cbGet(GRB.Callback.MIP_OBJBND),
+                    nodes=int(model.cbGet(GRB.Callback.MIP_NODCNT)),
+                    iterations=int(model.cbGet(GRB.Callback.MIP_ITRCNT)),
+                    improvements=self._improvements,
+                )
             )
 
 

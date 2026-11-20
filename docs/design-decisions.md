@@ -28,7 +28,7 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 | 14 | Docs and experiments | Experiment journal | Scripts in `experiments/`, results in `docs/experiments.md` (decided) | High (90%) |
 | 15 | Docs and experiments | Where the bound comes from | Teach it through decisions 3 and 4, with no extra code | High (85%) |
 | 16 | Observability, API and UI | Observability stack | `grafana/otel-lgtm` in Docker Compose; OTLP over HTTP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set; no export otherwise | High (85%) |
-| 17 | Observability, API and UI | API | FastAPI under `/api` on `127.0.0.1`; one Gurobi environment per run; cancel through `terminate()` | High (85%) |
+| 17 | Observability, API and UI | API | FastAPI under `/api` on `127.0.0.1`; one Gurobi environment per run; cancel through `terminate()` | High (90%) |
 | 18 | Observability, API and UI | Progress transport | SSE for progress; plain requests for everything else | High (85%) |
 | 19 | Observability, API and UI | UI library | React with Vite and TypeScript | Medium (75%) |
 | 20 | Observability, API and UI | UI serving and API types | Vite dev proxy while developing; FastAPI serves the built UI; types generated with openapi-typescript | Medium (80%) |
@@ -308,7 +308,7 @@ Two bugs found in the spike, which become rules:
 
 **Recommendation.** FastAPI under `/api`, bound to `127.0.0.1`, no auth. Endpoints: `POST /api/runs`, `GET /api/runs/{id}`, `GET /api/runs/{id}/events`, `POST /api/runs/{id}/cancel`. Runs execute in a thread pool. Each run gets its own environment. Creating and freeing environments happens under one process-wide lock, because Gurobi documents both as not thread-safe and FastAPI runs sync handlers on pool threads. The spike created environments on the request thread without a lock, which is safe only while requests don't overlap. Two workers; when both are busy, `POST /api/runs` returns 429. Runs are kept in memory.
 
-**Confidence: High (85%)**, measured in a spike. **To raise it:** test two overlapping `POST /api/runs` requests under the lock.
+**Confidence: High (90%)**, measured in a spike and then built in Step 8. Tests run two solves at once, each to its own optimum, and check the 429 when both workers are busy. Cancelling sets a flag that the progress callback checks before calling `terminate()`, which Gurobi documents as callable "from a callback, from another thread", so the API never holds a model from another thread and a cancel after the run has ended changes nothing (it returns 409). The existence check is a FastAPI dependency, which runs before the response starts; with the lookup moved inside the stream, the 404 test fails.
 
 ## 18. Progress transport
 
@@ -320,7 +320,7 @@ Measured against a running server: 20 progress events over 3.7 seconds for a ful
 | **SSE** | Server push; browser `EventSource` reconnects automatically; `Last-Event-ID` for resuming | `EventSource` only does GET, so cancel stays a separate POST |
 | WebSockets | Two-way | More than needed; reconnection is hand-written |
 
-**Recommendation.** SSE for progress. The solver thread appends samples and wakes the stream through a `threading.Condition`. On reconnect, resume from `Last-Event-ID`. The spike replayed all events instead, which is a small fix still to write.
+**Recommendation.** SSE for progress. The solver thread appends samples and wakes the stream through a `threading.Condition`. On reconnect, resume from `Last-Event-ID`. Built in Step 8 with FastAPI's native SSE (`EventSourceResponse`, added in 0.135.0); a test checks that a client resuming from an event id gets exactly the events after it.
 
 **Confidence: High (85%).**
 
