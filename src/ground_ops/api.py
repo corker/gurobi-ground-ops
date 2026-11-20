@@ -87,7 +87,7 @@ class Run(BaseModel):
     error: str | None = None
     done: bool = False
 
-    def add_event(self, event: str, data: BaseModel) -> None:
+    def add_event(self, event: str, *, data: BaseModel) -> None:
         self.events.append(ServerSentEvent(id=str(len(self.events)), event=event, data=data))
         self.changed.notify_all()
 
@@ -108,23 +108,24 @@ class Run(BaseModel):
 def _instance(request: RunRequest) -> AssignmentInstance | CoverageInstance:
     if request.model == "coverage":
         return generate_coverage(request.seed)
-    instance = generate_assignment(request.tasks, request.seed, request.handlers)
-    check_size(*model_size(instance))
+    instance = generate_assignment(request.tasks, seed=request.seed, n_handlers=request.handlers)
+    n_vars, n_constrs = model_size(instance)
+    check_size(n_vars, n_constrs=n_constrs)
     return instance
 
 
-def _execute(run: Run, settings: SolverSettings, telemetry: Telemetry | None, workers: threading.Semaphore) -> None:
+def _execute(run: Run, *, settings: SolverSettings, telemetry: Telemetry | None, workers: threading.Semaphore) -> None:
     def on_progress(progress: Progress) -> None:
         with run.changed:
             run.progress = progress
             if (now := time.monotonic()) - run.sampled_at >= PROGRESS_INTERVAL_S:
                 run.sampled_at = now
-                run.add_event("progress", progress)
+                run.add_event("progress", data=progress)
 
     recording: AbstractContextManager[ProgressRecorder] = (
         nullcontext(ProgressRecorder(run.id, on_progress=on_progress, stop=run.stop))
         if telemetry is None
-        else telemetry.run(run.model, run.id, on_progress=on_progress, stop=run.stop)
+        else telemetry.run(run.model, run_id=run.id, on_progress=on_progress, stop=run.stop)
     )
     result, error = None, None
     try:
@@ -142,12 +143,12 @@ def _execute(run: Run, settings: SolverSettings, telemetry: Telemetry | None, wo
         workers.release()
         with run.changed:
             if run.progress is not None:
-                run.add_event("progress", run.progress)
+                run.add_event("progress", data=run.progress)
             run.result, run.error, run.done = result, error, True
-            run.add_event("done", Finished(status=None if result is None else result.status, error=error))
+            run.add_event("done", data=Finished(status=None if result is None else result.status, error=error))
 
 
-def _stream(run: Run, after: int) -> Iterator[ServerSentEvent]:
+def _stream(run: Run, *, after: int) -> Iterator[ServerSentEvent]:
     sent = after + 1
     while True:
         with run.changed:
@@ -160,9 +161,14 @@ def _stream(run: Run, after: int) -> Iterator[ServerSentEvent]:
             return
 
 
-def _start(run: Run, settings: SolverSettings, telemetry: Telemetry | None, workers: threading.Semaphore) -> None:
+def _start(run: Run, *, settings: SolverSettings, telemetry: Telemetry | None, workers: threading.Semaphore) -> None:
     try:
-        threading.Thread(target=_execute, args=(run, settings, telemetry, workers), daemon=True).start()
+        threading.Thread(
+            target=_execute,
+            args=(run,),
+            kwargs={"settings": settings, "telemetry": telemetry, "workers": workers},
+            daemon=True,
+        ).start()
     except RuntimeError:
         # A thread that never started will never free its worker.
         workers.release()
@@ -195,7 +201,7 @@ def create_app(telemetry: Telemetry | None) -> FastAPI:
             raise HTTPException(status_code=429, detail=f"all {WORKERS} workers are busy; try again when a run ends")
         run = Run(id=new_run_id(), model=request.model, instance=instance)
         settings = SolverSettings(expose_search=request.expose_search, work_limit=request.work_limit)
-        _start(run, settings, telemetry, workers)
+        _start(run, settings=settings, telemetry=telemetry, workers=workers)
         with runs_lock:
             runs[run.id] = run
         return run.view()
@@ -206,10 +212,10 @@ def create_app(telemetry: Telemetry | None) -> FastAPI:
 
     @app.get("/api/runs/{run_id}/events", response_class=EventSourceResponse)
     def run_events(
-        run: ExistingRun, last_event_id: Annotated[int | None, Header(ge=0)] = None
+        run: ExistingRun, *, last_event_id: Annotated[int | None, Header(ge=0)] = None
     ) -> Iterator[ServerSentEvent]:
         """`progress` events at most every 0.2 s, then a final `progress` and a `done`. Resumes after Last-Event-ID."""
-        yield from _stream(run, -1 if last_event_id is None else last_event_id)
+        yield from _stream(run, after=-1 if last_event_id is None else last_event_id)
 
     @app.post("/api/runs/{run_id}/cancel", status_code=202)
     def cancel_run(run: ExistingRun) -> RunView:

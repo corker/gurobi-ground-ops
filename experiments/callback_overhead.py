@@ -11,9 +11,9 @@ from ground_ops.solver import SolverSettings, gurobi_env
 REPEATS = 5
 
 
-def solve(seed: int, with_callback: bool) -> tuple[float, int, float]:
+def solve(seed: int, *, with_callback: bool) -> tuple[float, int, float]:
     with gurobi_env(SolverSettings(expose_search=True)) as env:
-        model, _ = build_model(generate_assignment(40, seed), env)
+        model, _ = build_model(generate_assignment(40, seed=seed), env=env)
         with model:
             start = time.perf_counter()
             model.optimize(ProgressRecorder("experiment") if with_callback else None)

@@ -87,7 +87,7 @@ class ProgressRecorder:
             )
         )
 
-    def __call__(self, model: gp.Model, where: int) -> None:
+    def __call__(self, model: gp.Model, where: int) -> None:  # noqa: PLR0917 - Gurobi calls it positionally
         if self._stop is not None and self._stop.is_set():
             # terminate() may be called from a callback; the solve then ends with status INTERRUPTED.
             # https://docs.gurobi.com/projects/optimizer/en/current/reference/python/model.html
@@ -120,6 +120,6 @@ class ProgressRecorder:
             )
 
 
-def phase(recorder: ProgressRecorder | None, name: str) -> AbstractContextManager[object]:
+def phase(recorder: ProgressRecorder | None, *, name: str) -> AbstractContextManager[object]:
     """A span for one phase of a solve, or nothing when the solve isn't being recorded."""
     return recorder.start_span(name) if recorder is not None else nullcontext()

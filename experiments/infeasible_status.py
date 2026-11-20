@@ -17,10 +17,10 @@ def main() -> None:
     statuses: Counter[int] = Counter()
     for n_tasks in SIZES:
         for seed in SEEDS:
-            too_few = peak_concurrency(generate_assignment(n_tasks, seed).tasks) - 1
+            too_few = peak_concurrency(generate_assignment(n_tasks, seed=seed).tasks) - 1
             for exposed in (False, True):
                 with gurobi_env(SolverSettings(expose_search=exposed)) as env:
-                    model, _ = build_model(generate_assignment(n_tasks, seed, n_handlers=too_few), env)
+                    model, _ = build_model(generate_assignment(n_tasks, seed=seed, n_handlers=too_few), env=env)
                     with model:
                         model.optimize()
                         statuses[model.Status] += 1

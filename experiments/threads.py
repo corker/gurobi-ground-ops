@@ -8,9 +8,9 @@ SEEDS = range(1, 6)
 N_TASKS = 40
 
 
-def search(seed: int, threads: int) -> tuple[float, int, float]:
+def search(seed: int, *, threads: int) -> tuple[float, int, float]:
     with gurobi_env(SolverSettings(expose_search=True)) as env:
-        model, _ = build_model(generate_assignment(N_TASKS, seed), env)
+        model, _ = build_model(generate_assignment(N_TASKS, seed=seed), env=env)
         with model:
             model.Params.Threads = threads
             model.optimize()
@@ -21,7 +21,7 @@ def main() -> None:
     print(f"Model 1, {N_TASKS} tasks, Presolve=0, Cuts=0, Seed=0; each run twice")
     for seed in SEEDS:
         for threads in (1, 4):
-            first, second = search(seed, threads), search(seed, threads)
+            first, second = search(seed, threads=threads), search(seed, threads=threads)
             objective, nodes, work = first
             print(
                 f"seed {seed}, {threads} thread(s): objective {objective:g}, nodes {nodes}, work {work:.4f}, "

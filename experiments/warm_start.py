@@ -15,9 +15,9 @@ DELAY_MINUTES = 25
 EXPOSED = SolverSettings(expose_search=True)
 
 
-def work(instance_seed: int, start: dict[int, int] | None) -> float:
+def work(instance_seed: int, *, start: dict[int, int] | None) -> float:
     recorder = ProgressRecorder("experiment")
-    delayed = move_task(generate_assignment(N_TASKS, instance_seed), MOVED_TASK, DELAY_MINUTES)
+    delayed = move_task(generate_assignment(N_TASKS, seed=instance_seed), task_id=MOVED_TASK, minutes=DELAY_MINUTES)
     result = solve_assignment(delayed, recorder=recorder, settings=EXPOSED, start=start)
     assert result.status is Status.OPTIMAL
     assert recorder.latest is not None
@@ -33,10 +33,10 @@ def main() -> None:
     print("seed  cold     full start  partial start  (work units)")
     cold, full, partial = [], [], []
     for seed in SEEDS:
-        previous = dict(solve_assignment(generate_assignment(N_TASKS, seed), settings=EXPOSED).solution)
-        cold.append(work(seed, None))
-        full.append(work(seed, previous))
-        partial.append(work(seed, {t: h for t, h in previous.items() if t != MOVED_TASK}))
+        previous = dict(solve_assignment(generate_assignment(N_TASKS, seed=seed), settings=EXPOSED).solution)
+        cold.append(work(seed, start=None))
+        full.append(work(seed, start=previous))
+        partial.append(work(seed, start={t: h for t, h in previous.items() if t != MOVED_TASK}))
         print(f"{seed:>4}  {cold[-1]:7.3f}  {full[-1]:10.3f}  {partial[-1]:13.3f}")
     for name, values in (("cold", cold), ("full start", full), ("partial start", partial)):
         print(f"{name}: {describe(values)}")

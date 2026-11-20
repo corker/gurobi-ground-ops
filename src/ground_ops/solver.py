@@ -66,7 +66,7 @@ def gurobi_env(settings: SolverSettings) -> Iterator[gp.Env]:
             env.dispose()
 
 
-def check_size(n_vars: int, n_constrs: int) -> None:
+def check_size(n_vars: int, *, n_constrs: int) -> None:
     """Raise if a model this big doesn't fit the licence bundled with gurobipy."""
     if n_vars > FREE_LICENCE_LIMIT or n_constrs > FREE_LICENCE_LIMIT:
         raise ValueError(

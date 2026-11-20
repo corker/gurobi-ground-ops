@@ -29,24 +29,26 @@ def brute_force_optimum(instance: AssignmentInstance) -> int:
         dict(zip((t.id for t in instance.tasks), choice, strict=True))
         for choice in product(handler_ids, repeat=len(instance.tasks))
     )
-    return min(total_overtime(instance, a) for a in feasible if not assignment_violations(instance, a))
+    return min(
+        total_overtime(instance, assignment=a) for a in feasible if not assignment_violations(instance, assignment=a)
+    )
 
 
 def test_hand_made_instance_has_the_hand_computed_optimum() -> None:
     result = solve_assignment(HAND_MADE)
     assert result.status is Status.OPTIMAL
     assert result.objective == 15
-    assert assignment_violations(HAND_MADE, result.solution) == []
+    assert assignment_violations(HAND_MADE, assignment=result.solution) == []
 
 
 # Brute force grows as handlers ** tasks, so 8-task cases use only seeds that need at most 4 handlers.
-EIGHT_TASK_SEEDS = [s for s in range(1, 60) if len(generate_assignment(8, s).handlers) <= 4][:5]
+EIGHT_TASK_SEEDS = [s for s in range(1, 60) if len(generate_assignment(8, seed=s).handlers) <= 4][:5]
 BRUTE_FORCE_CASES = [(6, seed) for seed in range(1, 21)] + [(8, seed) for seed in EIGHT_TASK_SEEDS]
 
 
 @pytest.mark.parametrize(("n_tasks", "seed"), BRUTE_FORCE_CASES)
 def test_optimum_matches_brute_force_on_small_instances(n_tasks: int, seed: int) -> None:
-    instance = generate_assignment(n_tasks, seed)
+    instance = generate_assignment(n_tasks, seed=seed)
     result = solve_assignment(instance)
     assert result.status is Status.OPTIMAL
     assert result.objective == brute_force_optimum(instance)
@@ -57,8 +59,8 @@ def test_solution_is_feasible_and_its_overtime_equals_the_objective() -> None:
     result = solve_assignment(instance)
     assert result.status is Status.OPTIMAL
     assert result.objective == 8  # regression value, measured when this test was written
-    assert assignment_violations(instance, result.solution) == []
-    assert total_overtime(instance, result.solution) == result.objective
+    assert assignment_violations(instance, assignment=result.solution) == []
+    assert total_overtime(instance, assignment=result.solution) == result.objective
     assert result.gap == 0
 
 
@@ -107,8 +109,8 @@ def test_effort_limit_returns_feasible_with_nonzero_gap() -> None:
     assert result.objective is not None
     assert result.gap is not None
     assert result.gap > 0
-    assert assignment_violations(instance, result.solution) == []
-    assert total_overtime(instance, result.solution) == result.objective
+    assert assignment_violations(instance, assignment=result.solution) == []
+    assert total_overtime(instance, assignment=result.solution) == result.objective
 
 
 def test_a_limit_before_the_root_relaxation_keeps_the_first_schedule_but_reports_no_bound() -> None:
@@ -116,7 +118,7 @@ def test_a_limit_before_the_root_relaxation_keeps_the_first_schedule_but_reports
     result = solve_assignment(instance, settings=SolverSettings(expose_search=True, work_limit=0))
     assert result.status is Status.LIMIT_REACHED
     assert (result.bound, result.gap) == (None, None)
-    assert assignment_violations(instance, result.solution) == []
+    assert assignment_violations(instance, assignment=result.solution) == []
 
 
 @pytest.mark.parametrize("work_limit", [-1.0, float("nan")])
@@ -127,7 +129,7 @@ def test_a_negative_or_nan_work_limit_is_rejected(work_limit: float) -> None:
 
 @pytest.mark.parametrize(("seed", "partial"), [(1, False), (2, False), (3, False), (1, True)])
 def test_a_warm_start_from_the_previous_schedule_is_used_and_reaches_the_cold_optimum(seed: int, partial: bool) -> None:
-    before = generate_assignment(20, seed)
+    before = generate_assignment(20, seed=seed)
     previous = solve_assignment(before).solution
     delayed = move_task(before, task_id=4, minutes=25)
     start = {t: h for t, h in previous.items() if not (partial and t == 4)}
@@ -136,7 +138,7 @@ def test_a_warm_start_from_the_previous_schedule_is_used_and_reaches_the_cold_op
     # "Loaded user MIP start" when the old schedule still fits; "User MIP start violates" when Gurobi repairs it.
     assert any("user mip start" in line.lower() for line in lines)
     assert warm.objective == solve_assignment(delayed).objective
-    assert assignment_violations(delayed, warm.solution) == []
+    assert assignment_violations(delayed, assignment=warm.solution) == []
 
 
 def test_iis_names_the_two_overlapping_tasks_and_the_one_handler_who_cant_do_both() -> None:

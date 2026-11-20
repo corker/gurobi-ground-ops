@@ -41,8 +41,13 @@ line-length = 120
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "N", "ANN", "C90", "PT", "ARG", "RET", "ERA", "T20", "PLR", "C4", "FURB", "PERF", "PIE", "PTH"]
 
+[tool.ruff.lint.pylint]
+# Every argument after the first is named at the call site.
+max-positional-args = 1
+
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["PLR2004"]
+# pytest calls test functions and passes their fixtures by name.
+"tests/**" = ["PLR2004", "PLR0917"]
 "src/ground_ops/cli.py" = ["T20"]
 "experiments/**" = ["T20"]
 

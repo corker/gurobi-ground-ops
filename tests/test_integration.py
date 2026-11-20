@@ -22,7 +22,7 @@ WAIT_SECONDS = 120
 PORTS = {"grafana": 3000, "otlp": 4318, "prometheus": 9090}
 
 
-def poll[T](fetch: Callable[[], T], what: str) -> T:
+def poll[T](fetch: Callable[[], T], *, what: str) -> T:
     """Call `fetch` until it returns something truthy, tolerating connection errors while the container starts."""
     deadline = time.monotonic() + WAIT_SECONDS
     while time.monotonic() < deadline:
@@ -35,7 +35,7 @@ def poll[T](fetch: Callable[[], T], what: str) -> T:
     raise AssertionError(f"timed out after {WAIT_SECONDS} s waiting for {what}")
 
 
-def get_json(url: str, auth: bool = False) -> Any:  # noqa: ANN401 - parsed JSON
+def get_json(url: str, *, auth: bool = False) -> Any:  # noqa: ANN401 - parsed JSON
     headers = {"Authorization": "Basic " + base64.b64encode(b"admin:admin").decode()} if auth else {}
     with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=10) as response:
         return json.load(response)
@@ -52,8 +52,10 @@ def lgtm() -> Iterator[dict[str, str]]:
     with container:
         host = container.get_container_host_ip()
         urls = {name: f"http://{host}:{container.get_exposed_port(port)}" for name, port in PORTS.items()}
-        poll(lambda: get_json(f"{urls['grafana']}/api/health").get("database") == "ok", "Grafana")
-        poll(lambda: urllib.request.urlopen(f"{urls['prometheus']}/-/ready", timeout=5).status == 200, "Prometheus")
+        poll(lambda: get_json(f"{urls['grafana']}/api/health").get("database") == "ok", what="Grafana")
+        poll(
+            lambda: urllib.request.urlopen(f"{urls['prometheus']}/-/ready", timeout=5).status == 200, what="Prometheus"
+        )
         yield urls
 
 
@@ -68,7 +70,7 @@ def exported_run(lgtm: dict[str, str]) -> str:
         ids: list[str] = get_json(f"{lgtm['prometheus']}/api/v1/label/run_id/values")["data"]
         return ids
 
-    (run_id,) = poll(run_ids, "the run_id in Prometheus")
+    (run_id,) = poll(run_ids, what="the run_id in Prometheus")
     return run_id
 
 
@@ -80,7 +82,7 @@ def test_metrics_reach_prometheus_under_their_translated_names(lgtm: dict[str, s
         return float(result[0]["value"][1]) if result else None
 
     # Ingestion lags slightly, so an earlier export can briefly be the latest sample; wait for the final one.
-    assert poll(lambda: final_bound() == 30.0, "the run's final bound (30) in Prometheus")
+    assert poll(lambda: final_bound() == 30.0, what="the run's final bound (30) in Prometheus")
 
 
 def test_gurobi_log_lines_reach_loki(lgtm: dict[str, str], exported_run: str) -> None:
@@ -92,7 +94,7 @@ def test_gurobi_log_lines_reach_loki(lgtm: dict[str, str], exported_run: str) ->
         streams = get_json(url, auth=True)["data"]["result"]
         return [value[1] for stream in streams for value in stream["values"]]
 
-    assert any(line.startswith("Optimal solution found") for line in poll(lines, "the run's log lines in Loki"))
+    assert any(line.startswith("Optimal solution found") for line in poll(lines, what="the run's log lines in Loki"))
 
 
 def test_the_run_is_traced_in_tempo_with_a_span_per_phase(lgtm: dict[str, str], exported_run: str) -> None:
@@ -104,7 +106,7 @@ def test_the_run_is_traced_in_tempo_with_a_span_per_phase(lgtm: dict[str, str], 
         return [t["traceID"] for t in get_json(search, auth=True).get("traces") or []]
 
     # Tempo's search index lags ingestion, so this can take tens of seconds.
-    (trace_id,) = poll(trace_ids, "the run's trace in Tempo")
+    (trace_id,) = poll(trace_ids, what="the run's trace in Tempo")
     trace = get_json(f"{lgtm['grafana']}/api/datasources/proxy/uid/tempo/api/traces/{trace_id}", auth=True)
     names = {span["name"] for batch in trace["batches"] for scope in batch["scopeSpans"] for span in scope["spans"]}
     assert names == {"ground-ops run", "generate instance", "build model", "solve"}

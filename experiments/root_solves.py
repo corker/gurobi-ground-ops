@@ -11,23 +11,23 @@ from ground_ops.solver import SolverSettings
 SEEDS = range(1, 21)
 
 
-def assignment_nodes(n_tasks: int, seed: int, exposed: bool) -> int:
+def assignment_nodes(n_tasks: int, *, seed: int, exposed: bool) -> int:
     recorder = ProgressRecorder("experiment")
     solve_assignment(
-        generate_assignment(n_tasks, seed), recorder=recorder, settings=SolverSettings(expose_search=exposed)
+        generate_assignment(n_tasks, seed=seed), recorder=recorder, settings=SolverSettings(expose_search=exposed)
     )
     assert recorder.latest is not None
     return recorder.latest.nodes
 
 
-def coverage_nodes(seed: int, exposed: bool) -> int:
+def coverage_nodes(seed: int, *, exposed: bool) -> int:
     recorder = ProgressRecorder("experiment")
     solve_coverage(generate_coverage(seed), recorder=recorder, settings=SolverSettings(expose_search=exposed))
     assert recorder.latest is not None
     return recorder.latest.nodes
 
 
-def report(label: str, exposed: bool, counts: list[int]) -> None:
+def report(label: str, *, exposed: bool, counts: list[int]) -> None:
     settings = "Presolve=0, Cuts=0" if exposed else "defaults"
     print(
         f"{label}, {settings}: {sum(n <= 1 for n in counts)}/{len(counts)} at the root; "
@@ -38,9 +38,13 @@ def report(label: str, exposed: bool, counts: list[int]) -> None:
 def main() -> None:
     for n_tasks in (20, 30, 40, 48):
         for exposed in (False, True):
-            report(f"Model 1, {n_tasks} tasks", exposed, [assignment_nodes(n_tasks, s, exposed) for s in SEEDS])
+            report(
+                f"Model 1, {n_tasks} tasks",
+                exposed=exposed,
+                counts=[assignment_nodes(n_tasks, seed=s, exposed=exposed) for s in SEEDS],
+            )
     for exposed in (False, True):
-        report("Model 2, 48 slots", exposed, [coverage_nodes(s, exposed) for s in SEEDS])
+        report("Model 2, 48 slots", exposed=exposed, counts=[coverage_nodes(s, exposed=exposed) for s in SEEDS])
 
 
 if __name__ == "__main__":

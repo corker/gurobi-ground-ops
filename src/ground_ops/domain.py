@@ -78,19 +78,19 @@ class Result(BaseModel):
     iis: tuple[str, ...] = ()
 
 
-def conflict(a: Task, b: Task) -> bool:
+def conflict(a: Task, *, b: Task) -> bool:
     """True if one handler can't do both tasks, given the gap between them."""
     return a.start < b.end + GAP_MINUTES and b.start < a.end + GAP_MINUTES
 
 
-def overtime(task: Task, handler: Handler) -> int:
+def overtime(task: Task, *, handler: Handler) -> int:
     """Minutes of the task that fall outside the handler's shift window."""
     before = max(0, min(task.end, handler.shift_start) - task.start)
     after = max(0, task.end - max(task.start, handler.shift_end))
     return before + after
 
 
-def covers(pattern: ShiftPattern, slot: int) -> bool:
+def covers(pattern: ShiftPattern, *, slot: int) -> bool:
     return pattern.start <= slot < pattern.start + pattern.length and slot != pattern.break_slot
 
 

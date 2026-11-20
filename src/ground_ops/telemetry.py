@@ -68,7 +68,7 @@ def new_run_id() -> str:
 class Telemetry:
     """Exports each run's progress gauges, phase spans and Gurobi log lines, all labelled by run id and model."""
 
-    def __init__(self, metrics: MetricReader, spans: SpanProcessor, logs: LogRecordProcessor) -> None:
+    def __init__(self, metrics: MetricReader, *, spans: SpanProcessor, logs: LogRecordProcessor) -> None:
         self._active: dict[tuple[str, str], ProgressRecorder] = {}
         resource = Resource.create({"service.name": "ground-ops"})
         self._meter_provider = MeterProvider(
@@ -100,8 +100,8 @@ class Telemetry:
     def run(
         self,
         model: str,
-        run_id: str,
         *,
+        run_id: str,
         on_progress: ProgressSink | None = None,
         stop: threading.Event | None = None,
     ) -> Iterator[ProgressRecorder]:
@@ -145,8 +145,8 @@ def telemetry_from_environment() -> Telemetry | None:
         return None
     return Telemetry(
         PeriodicExportingMetricReader(OTLPMetricExporter(), export_interval_millis=export_interval_ms()),
-        BatchSpanProcessor(OTLPSpanExporter()),
-        BatchLogRecordProcessor(OTLPLogExporter()),
+        spans=BatchSpanProcessor(OTLPSpanExporter()),
+        logs=BatchLogRecordProcessor(OTLPLogExporter()),
     )
 
 

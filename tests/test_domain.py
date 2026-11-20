@@ -49,8 +49,8 @@ def test_data_types_are_immutable() -> None:
 def test_conflict_respects_the_ten_minute_gap(second_start: int, expected: bool) -> None:
     first = Task(id=0, start=60, end=90)
     second = Task(id=1, start=second_start, end=second_start + 20)
-    assert conflict(first, second) is expected
-    assert conflict(second, first) is expected
+    assert conflict(first, b=second) is expected
+    assert conflict(second, b=first) is expected
 
 
 @pytest.mark.parametrize(
@@ -65,12 +65,12 @@ def test_conflict_respects_the_ten_minute_gap(second_start: int, expected: bool)
 )
 def test_overtime_counts_minutes_outside_the_shift(start: int, end: int, expected: int) -> None:
     handler = Handler(id=0, shift_start=360, shift_end=600)
-    assert overtime(Task(id=0, start=start, end=end), handler) == expected
+    assert overtime(Task(id=0, start=start, end=end), handler=handler) == expected
 
 
 def test_a_pattern_covers_its_slots_except_the_break() -> None:
     pattern = ShiftPattern(id=0, start=4, length=4, break_slot=6)
-    assert [s for s in range(10) if covers(pattern, s)] == [4, 5, 7]
+    assert [s for s in range(10) if covers(pattern, slot=s)] == [4, 5, 7]
 
 
 @pytest.mark.parametrize(("break_slot", "expected"), [(None, 8), (5, 7)])

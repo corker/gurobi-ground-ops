@@ -8,11 +8,11 @@ INSTANCE = AssignmentInstance(
 
 
 def test_a_valid_assignment_has_no_violations() -> None:
-    assert assignment_violations(INSTANCE, {0: 0, 1: 1, 2: 1}) == []
+    assert assignment_violations(INSTANCE, assignment={0: 0, 1: 1, 2: 1}) == []
 
 
 def test_reports_each_broken_rule() -> None:
-    problems = assignment_violations(INSTANCE, {0: 0, 1: 0, 9: 5})
+    problems = assignment_violations(INSTANCE, assignment={0: 0, 1: 0, 9: 5})
     assert problems == [
         "task 2 has no handler",
         "task 9 doesn't exist",
@@ -22,7 +22,7 @@ def test_reports_each_broken_rule() -> None:
 
 
 def test_total_overtime_sums_minutes_outside_each_shift() -> None:
-    assert total_overtime(INSTANCE, {0: 0, 1: 1, 2: 0}) == 20
+    assert total_overtime(INSTANCE, assignment={0: 0, 1: 1, 2: 0}) == 20
 
 
 COVERAGE = CoverageInstance(
@@ -35,11 +35,11 @@ COVERAGE = CoverageInstance(
 
 
 def test_enough_people_in_every_slot_has_no_shortfalls() -> None:
-    assert coverage_shortfalls(COVERAGE, {0: 1, 1: 1}) == []
+    assert coverage_shortfalls(COVERAGE, staffing={0: 1, 1: 1}) == []
 
 
 def test_reports_each_understaffed_slot_and_bad_pattern() -> None:
-    assert coverage_shortfalls(COVERAGE, {0: 1, 1: -1, 7: 1}) == [
+    assert coverage_shortfalls(COVERAGE, staffing={0: 1, 1: -1, 7: 1}) == [
         "pattern 7 doesn't exist",
         "pattern 1 has -1 people",
         "slot 1 has 1 on duty, needs 2",
@@ -48,4 +48,4 @@ def test_reports_each_understaffed_slot_and_bad_pattern() -> None:
 
 
 def test_total_paid_slots_counts_people_times_paid_length() -> None:
-    assert total_paid_slots(COVERAGE, {0: 2, 1: 1}) == 6
+    assert total_paid_slots(COVERAGE, staffing={0: 2, 1: 1}) == 6

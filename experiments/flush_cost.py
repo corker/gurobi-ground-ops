@@ -18,13 +18,13 @@ WINDOW = 50
 def main() -> None:
     telemetry = Telemetry(
         InMemoryMetricReader(),
-        SimpleSpanProcessor(InMemorySpanExporter()),
-        SimpleLogRecordProcessor(InMemoryLogRecordExporter()),  # type: ignore[no-untyped-call]  # unannotated in the SDK
+        spans=SimpleSpanProcessor(InMemorySpanExporter()),
+        logs=SimpleLogRecordProcessor(InMemoryLogRecordExporter()),  # type: ignore[no-untyped-call]  # unannotated in the SDK
     )
     timings: list[float] = []
     for _ in range(max(CHECKPOINTS)):
         start = time.perf_counter()
-        with telemetry.run("assignment", new_run_id()) as recorder:
+        with telemetry.run("assignment", run_id=new_run_id()) as recorder:
             recorder.latest = Progress(
                 elapsed=0.0, work=0.0, incumbent=1.0, bound=1.0, nodes=0, iterations=0, improvements=1
             )

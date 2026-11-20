@@ -13,12 +13,12 @@ from ground_ops.progress import ProgressRecorder, phase
 from ground_ops.solver import DEFAULT_SETTINGS, SolverSettings, check_size, gurobi_env
 
 
-def build_model(instance: CoverageInstance, env: gp.Env) -> tuple[gp.Model, gp.tupledict[int, gp.Var]]:
+def build_model(instance: CoverageInstance, *, env: gp.Env) -> tuple[gp.Model, gp.tupledict[int, gp.Var]]:
     model = gp.Model(env=env)
     y = model.addVars([p.id for p in instance.patterns], vtype=GRB.INTEGER, name="y")
     for slot, needed in enumerate(instance.demand):
         model.addConstr(
-            gp.quicksum(y[p.id] for p in instance.patterns if covers(p, slot)) >= needed, name=f"demand[{slot}]"
+            gp.quicksum(y[p.id] for p in instance.patterns if covers(p, slot=slot)) >= needed, name=f"demand[{slot}]"
         )
     model.setObjective(gp.quicksum(paid_slots(p) * y[p.id] for p in instance.patterns), GRB.MINIMIZE)
     # gurobipy applies changes lazily; without this, NumVars and NumConstrs read 0.
@@ -35,20 +35,20 @@ def solve_coverage(
     if not instance.demand:
         raise ValueError("an instance needs at least one demand slot")
     with gurobi_env(settings) as env:
-        with phase(recorder, "build model"):
-            model, y = build_model(instance, env)
+        with phase(recorder, name="build model"):
+            model, y = build_model(instance, env=env)
         with model:
-            check_size(model.NumVars, model.NumConstrs)
-            with phase(recorder, "solve"):
+            check_size(model.NumVars, n_constrs=model.NumConstrs)
+            with phase(recorder, name="solve"):
                 model.optimize(recorder)
             if recorder is not None:
                 recorder.finish(model)
             if model.Status == GRB.INFEASIBLE:
                 return Result(status=Status.INFEASIBLE, objective=None, bound=None, gap=None, solution={})
-            return _result(model, y)
+            return _result(model, y=y)
 
 
-def _result(model: gp.Model, y: gp.tupledict[int, gp.Var]) -> Result:
+def _result(model: gp.Model, *, y: gp.tupledict[int, gp.Var]) -> Result:
     match model.Status:
         case GRB.OPTIMAL:
             status = Status.OPTIMAL

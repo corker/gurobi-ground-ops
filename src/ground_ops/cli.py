@@ -18,20 +18,20 @@ def _clock(minutes: int) -> str:
     return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
-def _schedule_lines(instance: AssignmentInstance, result: Result) -> list[str]:
+def _schedule_lines(instance: AssignmentInstance, *, result: Result) -> list[str]:
     lines = []
     for handler in instance.handlers:
         shift = f"{_clock(handler.shift_start)}-{_clock(handler.shift_end)}"
         tasks = sorted((t for t in instance.tasks if result.solution.get(t.id) == handler.id), key=lambda t: t.start)
         parts = []
         for t in tasks:
-            extra = overtime(t, handler)
+            extra = overtime(t, handler=handler)
             parts.append(f"T{t.id} {_clock(t.start)}-{_clock(t.end)}" + (f" (+{extra} overtime)" if extra else ""))
         lines.append(f"H{handler.id} shift {shift}: " + (", ".join(parts) or "no tasks"))
     return lines
 
 
-def _summary(result: Result, objective: str, unit: str) -> str:
+def _summary(result: Result, *, objective: str, unit: str) -> str:
     """The status line: the best solution against its bound, or that there is none yet."""
     bound = "none yet" if result.bound is None else f"{result.bound:g} {unit}"
     if result.objective is None:
@@ -40,7 +40,7 @@ def _summary(result: Result, objective: str, unit: str) -> str:
     return f"status: {result.status}  {objective}: {result.objective:g} {unit}  bound: {bound}  gap: {gap}"
 
 
-def report(instance: AssignmentInstance, seed: int, result: Result) -> str:
+def report(instance: AssignmentInstance, *, seed: int, result: Result) -> str:
     """The text `ground-ops solve` prints: the schedule, or the conflicting constraints when infeasible."""
     header = f"Model 1: {len(instance.tasks)} tasks, {len(instance.handlers)} handlers, seed {seed}"
     if result.status is Status.INFEASIBLE:
@@ -53,8 +53,8 @@ def report(instance: AssignmentInstance, seed: int, result: Result) -> str:
                 "(cover[t]: task t needs one handler; no_overlap[hH,tA,tB]: handler H can't do both A and B)",
             ]
         )
-    lines = _schedule_lines(instance, result) if result.solution else []
-    return "\n".join([header, _summary(result, "overtime", "min"), *lines])
+    lines = _schedule_lines(instance, result=result) if result.solution else []
+    return "\n".join([header, _summary(result, objective="overtime", unit="min"), *lines])
 
 
 def _slot_clock(slot: int) -> str:
@@ -66,33 +66,33 @@ def _pattern_label(pattern: ShiftPattern) -> str:
     return shift + (f" (break {_slot_clock(pattern.break_slot)})" if pattern.break_slot is not None else "")
 
 
-def coverage_report(instance: CoverageInstance, seed: int, result: Result) -> str:
+def coverage_report(instance: CoverageInstance, *, seed: int, result: Result) -> str:
     """The text `ground-ops cover` prints: the roster, and demand against people on duty."""
     patterns = {p.id: p for p in instance.patterns}
     header = f"Model 2: {len(instance.demand)} half-hour slots, {len(instance.patterns)} shift patterns, seed {seed}"
     if result.objective is None:
-        return "\n".join([header, _summary(result, "cost", "paid half-hours")])
+        return "\n".join([header, _summary(result, objective="cost", unit="paid half-hours")])
     lines = [
         header,
-        _summary(result, "cost", "paid half-hours"),
+        _summary(result, objective="cost", unit="paid half-hours"),
         "roster:",
     ]
     for pattern_id, people in sorted(result.solution.items(), key=lambda item: patterns[item[0]].start):
         lines.append(f"  {people} x {_pattern_label(patterns[pattern_id])}")
     lines.append("slot   demand  on duty")
     for slot, needed in enumerate(instance.demand):
-        on_duty = sum(n for p, n in result.solution.items() if covers(patterns[p], slot))
+        on_duty = sum(n for p, n in result.solution.items() if covers(patterns[p], slot=slot))
         surplus = f"  (+{on_duty - needed})" if on_duty > needed else ""
         lines.append(f"{_slot_clock(slot)}  {needed:>6}  {on_duty:>7}{surplus}")
     return "\n".join(lines)
 
 
-def _with_telemetry[T](model: str, solve: Callable[[ProgressRecorder | None], T]) -> T:
+def _with_telemetry[T](model: str, *, solve: Callable[[ProgressRecorder | None], T]) -> T:
     telemetry = telemetry_from_environment()
     if telemetry is None:
         return solve(None)
     try:
-        with telemetry.run(model, new_run_id()) as recorder:
+        with telemetry.run(model, run_id=new_run_id()) as recorder:
             print(f"ground-ops: exporting telemetry for run_id {recorder.run_id}", file=sys.stderr)
             return solve(recorder)
     finally:
@@ -145,22 +145,22 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "cover":
 
             def solve_cover(recorder: ProgressRecorder | None) -> tuple[CoverageInstance, Result]:
-                with phase(recorder, "generate instance"):
+                with phase(recorder, name="generate instance"):
                     coverage = generate_coverage(args.seed)
                 return coverage, solve_coverage(coverage, recorder=recorder, settings=settings)
 
-            coverage, result = _with_telemetry("coverage", solve_cover)
-            print(coverage_report(coverage, args.seed, result))
+            coverage, result = _with_telemetry("coverage", solve=solve_cover)
+            print(coverage_report(coverage, seed=args.seed, result=result))
             return 0
 
         def solve_tasks(recorder: ProgressRecorder | None) -> tuple[AssignmentInstance, Result]:
-            with phase(recorder, "generate instance"):
-                instance = generate_assignment(args.tasks, args.seed, args.handlers)
+            with phase(recorder, name="generate instance"):
+                instance = generate_assignment(args.tasks, seed=args.seed, n_handlers=args.handlers)
             result = solve_assignment(instance, recorder=recorder, settings=settings)
             return instance, result
 
-        instance, result = _with_telemetry("assignment", solve_tasks)
-        print(report(instance, args.seed, result))
+        instance, result = _with_telemetry("assignment", solve=solve_tasks)
+        print(report(instance, seed=args.seed, result=result))
         return 0
     except ValueError as error:
         print(f"ground-ops: {error}", file=sys.stderr)

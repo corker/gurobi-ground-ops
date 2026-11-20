@@ -15,6 +15,6 @@ def in_memory() -> Iterator[InMemoryTelemetry]:
     # The SDK's InMemoryLogRecordExporter has no type annotations (opentelemetry-sdk 1.45.2).
     logs = InMemoryLogRecordExporter()  # type: ignore[no-untyped-call]
     metrics, spans = InMemoryMetricReader(), InMemorySpanExporter()
-    telemetry = Telemetry(metrics, SimpleSpanProcessor(spans), SimpleLogRecordProcessor(logs))
+    telemetry = Telemetry(metrics, spans=SimpleSpanProcessor(spans), logs=SimpleLogRecordProcessor(logs))
     yield InMemoryTelemetry(telemetry=telemetry, metrics=metrics, spans=spans, logs=logs)
     telemetry.shutdown()
