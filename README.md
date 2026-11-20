@@ -2,7 +2,7 @@
 
 I'm a backend/platform engineer picking up Gurobi — I'm not an optimisation modeller. The models here are small and textbook, chosen because airport ground operations has the clearest real-world assignment and covering problems. The part I care about is what surrounds the solve: telemetry, deterministic tests, time limits, warm starts, infeasibility diagnosis.
 
-> **Status: Steps 1 to 6 of 9 done:** project setup, both models with their CLI commands, solver telemetry, the observability stack, and the operational edges (early stop, warm start, infeasibility diagnosis, reproducibility). Everything else below is planned. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
+> **Status: Steps 1 to 7 of 9 done:** project setup, both models with their CLI commands, solver telemetry, the observability stack, the operational edges (early stop, warm start, infeasibility diagnosis, reproducibility), and the required test set. Everything else below is planned. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
 
 ## What it does (planned)
 

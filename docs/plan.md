@@ -16,7 +16,7 @@ What to build, in order, and when each step counts as done. The rules for *how* 
 | 4 | Solver telemetry (the most important step) | Done |
 | 5 | Observability stack: LGTM in Docker Compose, dashboard, traces, logs | Done |
 | 6 | Operational edges: early stop, warm start, IIS, determinism | Done |
-| 7 | Required test set | Not started |
+| 7 | Required test set | Done |
 | 8 | API with live progress | Not started |
 | 9 | UI | Not started |
 
@@ -92,6 +92,8 @@ The progress recorder takes its final sample from the model after every solve, s
 The required tests are the "Done when" items of Steps 2 to 6: golden objectives, structural feasibility, the early stop returning feasible-but-not-optimal with a non-zero gap, the warm-start comparison, an IIS naming the right constraints, and a reproducibility check.
 
 **Done when:** `uv run pytest` passes all of them on the free licence, with no collector running.
+
+Checked by planting one bug at a time in the code each required test guards, such as reporting a stopped solve as optimal, skipping the warm start, listing every constraint as the IIS, or randomising `Seed`. Every planted bug made a test fail, except `cover >= 1` in place of `== 1`: with overtime costs that are never negative, the optimum never gains from a second handler on a task, and `Result.solution` maps each task to one handler, so nothing observable changes.
 
 ## Step 8: API with live progress
 

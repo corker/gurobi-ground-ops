@@ -129,8 +129,11 @@ def test_a_warm_start_from_the_previous_schedule_is_used_and_reaches_the_cold_op
 
 
 def test_iis_names_the_two_overlapping_tasks_and_the_one_handler_who_cant_do_both() -> None:
-    overlapping = AssignmentInstance(tasks=(Task(0, 360, 400), Task(1, 380, 420)), handlers=(Handler(0, 360, 600),))
-    assert set(solve_assignment(overlapping).iis) == {"cover[0]", "cover[1]", "no_overlap[h0,t0,t1]"}
+    # Task 2 is hours later and doesn't conflict with either, so its cover constraint isn't part of the conflict.
+    instance = AssignmentInstance(
+        tasks=(Task(0, 360, 400), Task(1, 380, 420), Task(2, 540, 560)), handlers=(Handler(0, 360, 600),)
+    )
+    assert set(solve_assignment(instance).iis) == {"cover[0]", "cover[1]", "no_overlap[h0,t0,t1]"}
 
 
 def test_a_work_limit_doesnt_cut_the_iis_short() -> None:
