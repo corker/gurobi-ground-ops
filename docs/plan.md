@@ -112,6 +112,7 @@ Checked by planting one bug at a time in the code each required test guards, suc
 - Three pages: New run; Run view (live gap, incumbent and bound from SSE, Cancel, a link to Grafana); Result (a Gantt chart for Model 1, demand against staffing for Model 2, the IIS highlighted when infeasible).
 - `ground-ops serve` starts the API and serves the built UI from `ui/dist` (D20). If the build is missing, it serves the API only and says so. The Vite dev server proxies `/api` while developing.
 - The Grafana link opens the provisioned dashboard filtered to the run's `run_id` and its time window.
+- The run view closes its `EventSource` on `done`; otherwise the browser reconnects to the closed stream forever. The `done` payload's type isn't in the OpenAPI schema yet, because FastAPI doesn't document SSE payloads; add it so the UI's types are generated, not hand-written.
 
 **Done when:** Vitest tests in `ui/` pass with a mocked API and cover all four statuses (optimal, limit reached, infeasible, interrupted). A run started from the UI against the real API reaches each page, and cancelling it shows `interrupted`.
 

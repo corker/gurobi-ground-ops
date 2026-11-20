@@ -162,8 +162,8 @@ curl -sN localhost:8000/api/runs/<id>/events
 | --- | --- |
 | `POST /api/runs` | Starts a run: `model` (`assignment` or `coverage`), `tasks`, `handlers`, `seed`, `expose_search`, `work_limit`. Returns 202 with the run. An invalid request, or one too big for the free licence, is refused with 422 before anything is built. With two runs already going, it returns 429. |
 | `GET /api/runs/{id}` | The run: its instance, latest progress, and the result once it ends |
-| `GET /api/runs/{id}/events` | Server-sent events: `progress` at most every 0.2 s, a final `progress`, then `done` with the status. A reconnecting client sends `Last-Event-ID` and gets only the events after it. |
-| `POST /api/runs/{id}/cancel` | Stops the run at the solver's next callback; the result is `interrupted`, with the best schedule found so far. 409 if the run has already ended. |
+| `GET /api/runs/{id}/events` | Server-sent events: `progress` at most every 0.2 s, a final `progress`, then `done` with the status. A reconnecting client sends `Last-Event-ID` and gets only the events after it. The stream closes after `done`; a browser `EventSource` reconnects to a closed stream by itself, so a client should call `close()` when it receives `done`. |
+| `POST /api/runs/{id}/cancel` | Asks the run to stop at the solver's next callback; the result is then `interrupted`, with the best schedule found so far. If the solve has already finished (or the run is computing an IIS), the result is unchanged. 409 if the run has already ended. |
 
 A run that doesn't exist is a 404 on every endpoint, before any stream starts. A run ends with one of the four solver statuses (`optimal`, `limit reached`, `infeasible`, `interrupted`), or as `failed` with an error message if the solve stops any other way. With `OTEL_EXPORTER_OTLP_ENDPOINT` set, each run is exported like a CLI run, and its API id is its `run_id` in Grafana.
 

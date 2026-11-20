@@ -112,6 +112,7 @@ def test_a_third_run_is_refused_while_both_workers_are_busy_and_accepted_once_on
     events(client, first)
     start(client, model="coverage")
     client.post(f"/api/runs/{second}/cancel")
+    events(client, second)
 
 
 def test_two_runs_at_once_each_reach_their_own_optimum(client: TestClient) -> None:

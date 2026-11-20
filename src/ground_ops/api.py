@@ -177,6 +177,15 @@ def _stream(run: Run, after: int) -> Iterator[ServerSentEvent]:
             return
 
 
+def _start(run: Run, settings: SolverSettings, telemetry: Telemetry | None, workers: threading.Semaphore) -> None:
+    try:
+        threading.Thread(target=_execute, args=(run, settings, telemetry, workers), daemon=True).start()
+    except RuntimeError:
+        # A thread that never started will never free its worker.
+        workers.release()
+        raise
+
+
 def create_app(telemetry: Telemetry | None) -> FastAPI:
     app = FastAPI(title="ground-ops")
     runs: dict[str, Run] = {}
@@ -202,10 +211,10 @@ def create_app(telemetry: Telemetry | None) -> FastAPI:
         if not workers.acquire(blocking=False):
             raise HTTPException(status_code=429, detail=f"all {WORKERS} workers are busy; try again when a run ends")
         run = Run(new_run_id(), request.model, instance)
+        settings = SolverSettings(expose_search=request.expose_search, work_limit=request.work_limit)
+        _start(run, settings, telemetry, workers)
         with runs_lock:
             runs[run.id] = run
-        settings = SolverSettings(expose_search=request.expose_search, work_limit=request.work_limit)
-        threading.Thread(target=_execute, args=(run, settings, telemetry, workers), daemon=True).start()
         return run.view()
 
     @app.get("/api/runs/{run_id}")

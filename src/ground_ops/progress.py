@@ -85,7 +85,8 @@ class ProgressRecorder:
 
     def __call__(self, model: gp.Model, where: int) -> None:
         if self._stop is not None and self._stop.is_set():
-            # Gurobi documents terminate() as callable from a callback; the solve ends with status INTERRUPTED.
+            # terminate() may be called from a callback; the solve then ends with status INTERRUPTED.
+            # https://docs.gurobi.com/projects/optimizer/en/current/reference/python/model.html
             model.terminate()
         if where == GRB.Callback.MESSAGE:
             # Gurobi delivers its log to this callback even with OutputFlag=0, one line per call.
