@@ -28,6 +28,7 @@ dev = [
     "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
     "ruff>=0.17.6",
+    "testcontainers>=4.15.0",
 ]
 
 [tool.ruff]
@@ -47,4 +48,5 @@ strict = true
 files = ["src", "tests", "experiments"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=ground_ops --cov-branch --cov-report=term-missing"
+addopts = "--cov=ground_ops --cov-branch --cov-report=term-missing -m 'not integration'"
+markers = ["integration: needs Docker; starts a grafana/otel-lgtm container (run with -m integration)"]

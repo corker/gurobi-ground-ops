@@ -1,0 +1,320 @@
+{
+  "uid": "ground-ops-solver",
+  "title": "ground-ops: solver progress",
+  "description": "One solve's incumbent, bound and gap over time, from the groundops.solver.* metrics. Pick a run_id; the CLI prints it.",
+  "schemaVersion": 39,
+  "editable": true,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "run_id",
+        "label": "run_id",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(groundops_solver_bound, run_id)",
+          "refId": "run_id"
+        },
+        "definition": "label_values(groundops_solver_bound, run_id)",
+        "refresh": 2,
+        "sort": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Incumbent and bound",
+      "description": "The incumbent is the best solution so far; the bound is the best the solution could possibly be. The gap between the lines is what's left to prove.",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 10
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "1s",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "groundops_solver_incumbent{run_id=\"$run_id\"}",
+          "legendFormat": "incumbent"
+        },
+        {
+          "refId": "B",
+          "expr": "groundops_solver_bound{run_id=\"$run_id\"}",
+          "legendFormat": "bound"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineInterpolation": "stepAfter"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Final gap",
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "1s",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "groundops_solver_gap_ratio{run_id=\"$run_id\"}"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Incumbent improvements",
+      "gridPos": {
+        "x": 16,
+        "y": 5,
+        "w": 8,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "1s",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "groundops_solver_incumbent_improvements{run_id=\"$run_id\"}"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Gap",
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "1s",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "groundops_solver_gap_ratio{run_id=\"$run_id\"}",
+          "legendFormat": "gap"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Nodes explored",
+      "gridPos": {
+        "x": 8,
+        "y": 10,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "1s",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "groundops_solver_nodes{run_id=\"$run_id\"}",
+          "legendFormat": "nodes"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Simplex iterations",
+      "gridPos": {
+        "x": 16,
+        "y": 10,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "1s",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "groundops_solver_simplex_iterations{run_id=\"$run_id\"}",
+          "legendFormat": "iterations"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Work units and wall-clock time",
+      "description": "Work units are Gurobi's deterministic effort measure; wall-clock time varies with machine load.",
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "1s",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "groundops_solver_work{run_id=\"$run_id\"}",
+          "legendFormat": "work units"
+        },
+        {
+          "refId": "B",
+          "expr": "groundops_solver_elapsed_seconds{run_id=\"$run_id\"}",
+          "legendFormat": "seconds"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "seconds"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "work units"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "suffix: work units"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": "logs",
+      "title": "Gurobi log",
+      "description": "Gurobi's own log lines for this run, from Loki. Each line carries the run's trace id, so it links to the trace in Tempo.",
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 14
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"ground-ops\"} | run_id=\"$run_id\""
+        }
+      ],
+      "options": {
+        "showTime": false,
+        "wrapLogMessage": false,
+        "sortOrder": "Ascending",
+        "enableLogDetails": true
+      }
+    }
+  ]
+}

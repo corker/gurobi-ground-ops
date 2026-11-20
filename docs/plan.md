@@ -14,7 +14,7 @@ What to build, in order, and when each step counts as done. The rules for *how* 
 | 2 | Model 1, task assignment, with golden tests and the CLI | Done |
 | 3 | Model 2, shift coverage | Done |
 | 4 | Solver telemetry (the most important step) | Done |
-| 5 | Observability stack: LGTM in Docker Compose, dashboard, traces, logs | Not started |
+| 5 | Observability stack: LGTM in Docker Compose, dashboard, traces, logs | Done |
 | 6 | Operational edges: early stop, warm start, IIS, determinism | Not started |
 | 7 | Required test set | Not started |
 | 8 | API with live progress | Not started |
@@ -71,6 +71,8 @@ Start only after Model 1 is done and tested.
 - `compose.yaml` with one `grafana/otel-lgtm` service (D16). The app keeps running on the host.
 - A Grafana dashboard provisioned as JSON: incumbent and bound on one panel, and gap, nodes and incumbent improvements on others, filtered by `run_id`. Queries use Prometheus's renamed metrics, such as `groundops_solver_gap_ratio`.
 - Traces with one span per phase (instance generation, model build, solve), carrying `run_id`. Step 6 adds a span for IIS. Gurobi's log lines go to Loki through the `MESSAGE` callback.
+
+- Opt-in integration tests (`uv run pytest -m integration`) that start `grafana/otel-lgtm` with Testcontainers and check that one real run's metrics, trace, log lines and the provisioned dashboard all arrive.
 
 **Done when:** one `docker compose up` plus one CLI run shows the run's curve in Grafana, its spans in Tempo and its log lines in Loki. `uv run pytest` still passes with no Docker.
 

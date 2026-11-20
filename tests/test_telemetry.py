@@ -10,7 +10,8 @@ from ground_ops.model1 import build_model, solve_assignment
 from ground_ops.model2 import solve_coverage
 from ground_ops.progress import Progress, ProgressRecorder
 from ground_ops.solver import gurobi_env
-from ground_ops.telemetry import PROCESS_START, Telemetry, export_interval_ms, telemetry_from_environment
+from ground_ops.telemetry import PROCESS_START, export_interval_ms, telemetry_from_environment
+from tests.support import InMemoryTelemetry
 
 METRIC_NAMES = {
     "groundops.solver.gap",
@@ -84,10 +85,11 @@ def test_exposing_the_search_explores_nodes() -> None:
     assert recorder.latest.nodes > 1
 
 
-def test_a_run_exports_every_metric_with_its_final_values_then_stops_being_reported() -> None:
-    reader = InMemoryMetricReader()
-    telemetry = Telemetry(reader)
-    with telemetry.run("assignment") as recorder:
+def test_a_run_exports_every_metric_with_its_final_values_then_stops_being_reported(
+    in_memory: InMemoryTelemetry,
+) -> None:
+    reader = in_memory.metrics
+    with in_memory.telemetry.run("assignment") as recorder:
         result = solve_assignment(generate_assignment(30, seed=1), recorder=recorder, expose_search=True)
 
     metrics = exported(reader)
@@ -99,11 +101,10 @@ def test_a_run_exports_every_metric_with_its_final_values_then_stops_being_repor
     assert exported(reader) == {}
 
 
-def test_run_ids_are_unique_and_start_with_the_process_start_time() -> None:
-    telemetry = Telemetry(InMemoryMetricReader())
+def test_run_ids_are_unique_and_start_with_the_process_start_time(in_memory: InMemoryTelemetry) -> None:
     ids = []
     for _ in range(3):
-        with telemetry.run("coverage") as recorder:
+        with in_memory.telemetry.run("coverage") as recorder:
             ids.append(recorder.run_id)
     assert len(set(ids)) == 3
     assert all(i.startswith(f"{PROCESS_START}-{os.getpid()}-") for i in ids)
@@ -128,3 +129,32 @@ def test_a_log_file_is_written_and_nothing_goes_to_the_console(
     solve_assignment(generate_assignment(30, seed=1), log_file=log, expose_search=True)
     assert "Expl Unexpl" in log.read_text()
     assert capfd.readouterr().out == ""
+
+
+def test_a_run_traces_each_phase_under_one_root_span(in_memory: InMemoryTelemetry) -> None:
+    with in_memory.telemetry.run("assignment") as recorder:
+        solve_assignment(generate_assignment(10, seed=1), recorder=recorder)
+
+    spans = {span.name: span for span in in_memory.spans.get_finished_spans()}
+    assert set(spans) == {"ground-ops run", "build model", "solve"}
+    root = spans["ground-ops run"]
+    assert root.parent is None
+    assert root.context is not None
+    for name in ("build model", "solve"):
+        parent = spans[name].parent
+        assert parent is not None
+        assert parent.span_id == root.context.span_id
+    assert all(span.attributes is not None and span.attributes["run_id"] == recorder.run_id for span in spans.values())
+
+
+def test_gurobi_log_lines_are_exported_with_the_run_id_and_trace(in_memory: InMemoryTelemetry) -> None:
+    with in_memory.telemetry.run("coverage") as recorder:
+        solve_coverage(generate_coverage(seed=1), recorder=recorder)
+
+    root = next(s for s in in_memory.spans.get_finished_spans() if s.name == "ground-ops run")
+    assert root.context is not None
+    records = [data.log_record for data in in_memory.logs.get_finished_logs()]
+    bodies = [str(r.body) for r in records]
+    assert any(body.startswith("Optimal solution found") for body in bodies)
+    assert all(r.attributes is not None and r.attributes["run_id"] == recorder.run_id for r in records)
+    assert {r.trace_id for r in records} == {root.context.trace_id}

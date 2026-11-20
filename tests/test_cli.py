@@ -1,11 +1,10 @@
 from pathlib import Path
 
 import pytest
-from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
 from ground_ops.cli import coverage_report, main, report
 from ground_ops.domain import AssignmentInstance, CoverageInstance, Handler, Result, ShiftPattern, Status, Task
-from ground_ops.telemetry import Telemetry
+from tests.support import InMemoryTelemetry
 
 INSTANCE = AssignmentInstance(
     tasks=(Task(0, 600, 615), Task(1, 420, 440), Task(2, 300, 320)),
@@ -61,10 +60,10 @@ def test_cover_command_prints_a_roster_and_exits_cleanly(capsys: pytest.CaptureF
 
 
 def test_solve_exports_telemetry_and_names_the_run_when_a_collector_is_configured(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], in_memory: InMemoryTelemetry
 ) -> None:
-    reader = InMemoryMetricReader()
-    monkeypatch.setattr("ground_ops.cli.telemetry_from_environment", lambda: Telemetry(reader))
+    reader = in_memory.metrics
+    monkeypatch.setattr("ground_ops.cli.telemetry_from_environment", lambda: in_memory.telemetry)
     assert main(["solve", "--tasks", "10", "--seed", "3"]) == 0
     assert "exporting telemetry for run_id" in capsys.readouterr().err
     data = reader.get_metrics_data()
@@ -84,3 +83,10 @@ def test_a_log_in_a_missing_directory_is_refused_before_solving(
 ) -> None:
     assert main([command, "--log", "/nonexistent/dir/x.log"]) == 2
     assert capsys.readouterr().err == "ground-ops: can't write the log: /nonexistent/dir isn't a directory\n"
+
+
+def test_the_cli_traces_instance_generation_too(monkeypatch: pytest.MonkeyPatch, in_memory: InMemoryTelemetry) -> None:
+    monkeypatch.setattr("ground_ops.cli.telemetry_from_environment", lambda: in_memory.telemetry)
+    assert main(["cover", "--seed", "2"]) == 0
+    names = {span.name for span in in_memory.spans.get_finished_spans()}
+    assert names == {"ground-ops run", "generate instance", "build model", "solve"}

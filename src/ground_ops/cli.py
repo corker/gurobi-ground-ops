@@ -9,7 +9,7 @@ from ground_ops.domain import AssignmentInstance, CoverageInstance, Result, Shif
 from ground_ops.instances import generate_assignment, generate_coverage
 from ground_ops.model1 import solve_assignment
 from ground_ops.model2 import solve_coverage
-from ground_ops.progress import ProgressRecorder
+from ground_ops.progress import ProgressRecorder, phase
 from ground_ops.telemetry import telemetry_from_environment
 
 
@@ -68,7 +68,7 @@ def coverage_report(instance: CoverageInstance, seed: int, result: Result) -> st
     return "\n".join(lines)
 
 
-def _with_telemetry(model: str, solve: Callable[[ProgressRecorder | None], Result]) -> Result:
+def _with_telemetry[T](model: str, solve: Callable[[ProgressRecorder | None], T]) -> T:
     telemetry = telemetry_from_environment()
     if telemetry is None:
         return solve(None)
@@ -98,19 +98,26 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "cover":
-            coverage = generate_coverage(args.seed)
 
-            def solve_cover(recorder: ProgressRecorder | None) -> Result:
-                return solve_coverage(coverage, recorder=recorder, log_file=args.log, expose_search=args.expose_search)
+            def solve_cover(recorder: ProgressRecorder | None) -> tuple[CoverageInstance, Result]:
+                with phase(recorder, "generate instance"):
+                    coverage = generate_coverage(args.seed)
+                return coverage, solve_coverage(
+                    coverage, recorder=recorder, log_file=args.log, expose_search=args.expose_search
+                )
 
-            print(coverage_report(coverage, args.seed, _with_telemetry("coverage", solve_cover)))
+            coverage, result = _with_telemetry("coverage", solve_cover)
+            print(coverage_report(coverage, args.seed, result))
             return 0
-        instance = generate_assignment(args.tasks, args.seed)
 
-        def solve_tasks(recorder: ProgressRecorder | None) -> Result:
-            return solve_assignment(instance, recorder=recorder, log_file=args.log, expose_search=args.expose_search)
+        def solve_tasks(recorder: ProgressRecorder | None) -> tuple[AssignmentInstance, Result]:
+            with phase(recorder, "generate instance"):
+                instance = generate_assignment(args.tasks, args.seed)
+            result = solve_assignment(instance, recorder=recorder, log_file=args.log, expose_search=args.expose_search)
+            return instance, result
 
-        print(report(instance, args.seed, _with_telemetry("assignment", solve_tasks)))
+        instance, result = _with_telemetry("assignment", solve_tasks)
+        print(report(instance, args.seed, result))
         return 0
     except ValueError as error:
         print(f"ground-ops: {error}", file=sys.stderr)

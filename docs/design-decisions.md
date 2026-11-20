@@ -275,7 +275,15 @@ Observed details that shape the design:
 
 **Recommendation.** One `grafana/otel-lgtm` service in `compose.yaml`, with the dashboard provisioned as JSON. The app runs on the host, not in a container.
 
-**Confidence: High (85%)** for metrics. Traces and Gurobi log lines in Loki (through the `MESSAGE` callback's `MSG_STRING`) aren't measured yet. **To raise it:** export one span and one log line to the same container and query them in Tempo and Loki.
+Measured in Step 5 against `grafana/otel-lgtm:0.41.1`:
+
+- **Metric names:** Prometheus adds a unit suffix only for real units (`1` gives `_ratio`, `s` gives `_seconds`); a `{…}` annotation adds none, so `groundops.solver.bound` is `groundops_solver_bound`.
+- **Curve:** with a 1-second export interval, a 2.6-second solve arrived as bound 23, 26, 30. The first second of the solve isn't sampled.
+- **Traces:** one trace per run, root span `ground-ops run` with `generate instance`, `build model` and `solve` children. Fetching by trace id works at once; Tempo's search found a new trace only after tens of seconds.
+- **Logs:** Gurobi delivers every log line to the `MESSAGE` callback even with `OutputFlag=0`. The lines reach Loki with `run_id` and the run's trace id, so a line links to its trace. The OpenTelemetry Python logs SDK is in [Development status](https://opentelemetry.io/docs/languages/python/) (traces and metrics are stable), so its exact version is locked in `uv.lock` (the `~=1.45` specifier alone would allow later 1.x releases).
+- **Dashboard provisioning:** mount the dashboards *directory*, not single files. A single-file bind mount keeps the original file, so an editor that saves by replacing the file leaves Grafana showing the old version.
+
+**Confidence: High (85%).** The opt-in integration tests (`uv run pytest -m integration`) check, against a real container: the run's final bound in Prometheus under its translated name, Gurobi log lines in Loki, the trace in Tempo with all four span names, and the provisioned dashboard. The in-memory tests check that log records carry the run's trace id. Observed once by hand, not automated: the exact curve values, Loki's side of the log-to-trace link, and the stale single-file mount.
 
 ## 17. API
 

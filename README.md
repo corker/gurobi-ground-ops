@@ -2,7 +2,7 @@
 
 I'm a backend/platform engineer picking up Gurobi — I'm not an optimisation modeller. The models here are small and textbook, chosen because airport ground operations has the clearest real-world assignment and covering problems. The part I care about is what surrounds the solve: telemetry, deterministic tests, time limits, warm starts, infeasibility diagnosis.
 
-> **Status: Steps 1 to 4 of 9 done:** project setup, both models with their CLI commands, and solver telemetry. Everything else below is planned. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
+> **Status: Steps 1 to 5 of 9 done:** project setup, both models with their CLI commands, solver telemetry, and the observability stack. Everything else below is planned. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
 
 ## What it does (planned)
 
@@ -126,7 +126,26 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 uv run ground-ops solve --task
 
 Each point carries `run_id` and `model` (`assignment` or `coverage`) attributes. Prometheus renames them on ingestion: dots become underscores and the unit becomes a suffix, so `groundops.solver.gap` is queried as `groundops_solver_gap_ratio`. A run's last values come from the model's final attributes rather than the last callback, which can fire before the final bound is known.
 
-If the endpoint is set but nothing is listening, the run still completes, but the final export retries for several seconds before giving up; `OTEL_EXPORTER_OTLP_TIMEOUT` shortens that.
+### Watching a solve in Grafana
+
+`compose.yaml` runs one `grafana/otel-lgtm` container: an OpenTelemetry Collector with Prometheus (metrics), Tempo (traces), Loki (logs) and Grafana. It needs Docker; the app itself still runs on your machine.
+
+```sh
+docker compose up -d
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 uv run ground-ops solve --tasks 40 --seed 1 --expose-search
+```
+
+Open Grafana at http://localhost:3000 (if it asks you to log in, the image's default user is `admin` with password `admin`), go to the **ground-ops: solver progress** dashboard, and pick the `run_id` the command printed. It shows incumbent against bound, the gap, nodes, simplex iterations, work units, and Gurobi's own log lines for that run. Each run is also a trace in Tempo, with one span per phase (generate instance, build model, solve); Tempo's search can take tens of seconds to find a new trace. The stack keeps data only while its container lives.
+
+If the endpoint is set but nothing is listening, the run still completes, but the result appears only after the exporters give up retrying: a 10-task solve took about 20 s on the machine in [docs/experiments.md](docs/experiments.md), against about 2 s with `OTEL_EXPORTER_OTLP_TIMEOUT=1` (the SDK's default is 10 s). Unset `OTEL_EXPORTER_OTLP_ENDPOINT` when the stack isn't running.
+
+### Integration tests
+
+`uv run pytest` needs no Docker. The integration tests start their own `grafana/otel-lgtm` container, run a real solve through the real exporter, and check that the metrics, logs, trace and dashboard all arrive (about 40 seconds):
+
+```sh
+uv run pytest -m integration
+```
 
 This section grows as each plan step lands.
 

@@ -11,7 +11,7 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 - **No performance claims or benchmark numbers that haven't been measured.** Any timing reported must come from a real run, with the machine and solver settings stated.
 - Never claim tests pass without running them and showing the real output.
 - Every instance must solve within the **free pip-installed gurobipy licence size limit**, so `uv sync && uv run pytest` works with no licence. If an instance doesn't fit, shrink it. Nothing may require a paid or academic licence.
-- All tests must pass with no OpenTelemetry collector running: they read metrics through an in-memory reader. With `OTEL_EXPORTER_OTLP_ENDPOINT` unset, no exporter is created and nothing is exported; there's no stdout fallback. `uv run pytest` must need no Docker, no Node and no browser.
+- All tests must pass with no OpenTelemetry collector running: they read metrics, spans and logs through in-memory exporters. Tests that need a real collector are marked `integration`, are excluded by default, and run with `uv run pytest -m integration` (needs Docker). With `OTEL_EXPORTER_OTLP_ENDPOINT` unset, no exporter is created and nothing is exported; there's no stdout fallback. `uv run pytest` must need no Docker, no Node and no browser.
 - Call `model.update()` before reading model size (`NumVars`, `NumConstrs`) or calling `copy()` or `relax()`. gurobipy applies changes lazily, so before `update()` the size reads 0 and a copy or relaxation is missing the pending constraints.
 
 ## Do NOT build

@@ -7,7 +7,7 @@ import gurobipy as gp
 from gurobipy import GRB
 
 from ground_ops.domain import AssignmentInstance, Result, Status, conflict, overtime
-from ground_ops.progress import ProgressRecorder
+from ground_ops.progress import ProgressRecorder, phase
 from ground_ops.solver import check_size, gurobi_env
 
 
@@ -40,10 +40,12 @@ def solve_assignment(
     if not instance.tasks:
         raise ValueError("an instance needs at least one task")
     with gurobi_env(log_file=log_file, expose_search=expose_search) as env:
-        model, x = build_model(instance, env)
+        with phase(recorder, "build model"):
+            model, x = build_model(instance, env)
         with model:
             check_size(model)
-            model.optimize(recorder)
+            with phase(recorder, "solve"):
+                model.optimize(recorder)
             if recorder is not None and model.Status == GRB.OPTIMAL:
                 recorder.finish(model)
             return _result(model, x)

@@ -1,0 +1,13 @@
+# Local observability stack only: Grafana, Prometheus, Tempo and Loki behind one OpenTelemetry Collector.
+# The app runs on the host and exports to it with OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318.
+services:
+  lgtm:
+    image: grafana/otel-lgtm:0.41.1
+    ports:
+      - "3000:3000" # Grafana
+      - "4318:4318" # OTLP over HTTP
+      - "9090:9090" # Prometheus, for querying metrics directly
+    volumes:
+      - ./grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/ground-ops.yaml:ro
+      # A directory, not single files: editors that save by replacing a file would leave a file mount stale.
+      - ./grafana/dashboards:/otel-lgtm/grafana/conf/provisioning/dashboards/ground-ops:ro
