@@ -6,21 +6,41 @@ What to build, in order, and when each step counts as done. The rules for *how* 
 
 **Stop rule.** If Model 1 takes longer than expected, stop after Model 1. One correct model beats two rushed ones. Steps 8 to 10 (observability stack, API, UI) come only after the core (Steps 1 to 7) is done, and nothing describes them as working until they are.
 
+## Status
+
+| Step | Goal | Status |
+| --- | --- | --- |
+| 1 | Project setup: package, smoke test, licence check | Not started |
+| 2 | Model 1, task assignment, with golden tests and the CLI | Not started |
+| 3 | Model 2, shift coverage | Not started |
+| 4 | Solver telemetry (the most important step) | Not started |
+| 5 | Operational edges: early stop, warm start, IIS, determinism | Not started |
+| 6 | HiGHS fallback behind one protocol | Not started |
+| 7 | Required test set | Not started |
+| 8 | Observability stack (optional) | Not started |
+| 9 | API with live progress (optional) | Not started |
+| 10 | UI (optional) | Not started |
+
+Update this table in the same commit that finishes a step.
+
 ## Step 1: Project setup
 
 The licence limits are already verified (D1): 2,000 variables and 2,000 linear constraints, with the gurobipy 14 licence expiring on 2028-11-29.
 
-- `pyproject.toml` managed by `uv`: Python 3.12+, `gurobipy~=14.0`, `highspy~=1.16`, the OpenTelemetry API and SDK, and `pytest` and `ruff` as dev dependencies. The OTLP exporter (Step 4) and FastAPI with uvicorn (Step 9) are optional extras added in those steps, so the core never needs them. Commit `uv.lock`.
-- A Python 3.12 pin, a `.gitignore` (virtual environment, caches, Gurobi `*.log` and `*.ilp` files, licence files), and an MIT `LICENSE`.
-- A README skeleton with the required opening, the licence-limit note, and the gurobipy version and its maintenance status from PyPI.
+- Create the project with `uv init --package --name ground-ops`: a `src/ground_ops/` package, the `uv_build` backend, and a `ground-ops` command. Python 3.12+, pinned with `.python-version`.
+- Step 1 adds only what Step 1 uses: `gurobipy~=14.0`, plus `pytest` and `ruff` as dev dependencies, with ruff's default settings. Each later step adds its own dependencies when it first needs them, for example `highspy~=1.16` in Step 6 and the OpenTelemetry API and SDK in Step 4. The OTLP exporter (Step 4) and FastAPI with uvicorn (Step 9) are optional extras, so the core never needs them. Commit `uv.lock`.
+- In `pyproject.toml`, `authors` lists the owner's name only. `uv init` copies the email address from git config, so remove it before committing; the repo is public.
+- A `.gitignore` covering the virtual environment, caches, Gurobi `*.log` and `*.ilp` files, and `gurobi.lic`. An MIT `LICENSE` in the owner's name.
+- Tests live in `tests/`. A first smoke test solves a trivial model with gurobipy and checks that it reports optimal, which proves the free licence is active.
+- Keep the existing README. Add a "How to run" section once these commands work.
 
-**Done when:** `uv sync && uv run pytest` runs on a clean checkout with no licence file.
+**Done when:** `uv sync && uv run pytest` passes, with the smoke test, on a checkout with no licence file. (With no tests at all, pytest exits with code 5, which isn't a pass.)
 
 ## Step 2: Model 1, handler-to-task assignment
 
 - `docs/domain.md`: the glossary and the list of simplifications (D12).
 - A seeded instance generator with tunable size, using task durations based on the turnaround dataset (D11).
-- The model (D2, D3): a binary variable x[h,t] for each handler and task; each task covered exactly once; pairwise no-overlap constraints with a uniform 10-minute gap between a handler's tasks (D3); the objective is minutes worked outside each handler's shift window. The formulation is written out in the README.
+- The model (D2, D3): a binary variable x[h,t] for each handler and task; each task covered exactly once; pairwise no-overlap constraints with a uniform 10-minute gap between a handler's tasks (D3); the objective is minutes worked outside each handler's shift window. The formulation is written out in a new "Models" section of the README, with sets, variables, constraints and objective.
 - An independent feasibility checker in repo code, which doesn't trust the solver (lens 1).
 - A CLI, `ground-ops solve`, that runs a seeded instance and prints the result and telemetry to stdout. Experiments and the log walkthrough use it.
 
@@ -31,7 +51,7 @@ The licence limits are already verified (D1): 2,000 variables and 2,000 linear c
 Start only after Model 1 is done and tested.
 
 - Set covering: choose integer staffing per shift pattern so that every half-hour of demand is covered, at minimum cost. Deliberately a different structure from Model 1.
-- Parameters based on the D4 proof of concept, without its early-start premium: a 24-hour horizon of 48 half-hour slots; patterns of 4, 6 or 8 hours starting at any slot; one unpaid break slot in patterns of 6 hours or more; cost is the number of paid slots. The demand profile comes from the seeded generator.
+- Parameters: a 24-hour horizon of 48 half-hour slots; patterns of 4, 6 or 8 hours starting at any slot; one unpaid break slot in patterns of 6 hours or more; cost is the number of paid slots. The demand profile comes from the seeded generator.
 
 **Done when:** the same kinds of tests pass as for Model 1: golden objective plus coverage feasibility.
 
@@ -47,10 +67,12 @@ Start only after Model 1 is done and tested.
 
 ## Step 5: Operational edges, each with a test
 
-- **Early stop:** stop after a given effort and return the best solution plus its gap. "Feasible but not proven optimal" is a normal result the caller can distinguish, not an error. Tests use an abstract effort limit, which maps to `WorkLimit` on Gurobi (D7, D5), and assert the shared result status "limit reached, feasible", not a backend's own status code. Because default instances solve at the root (D4), these tests also switch on one solve option that exposes the search: `Presolve=0, Cuts=0` on Gurobi, and presolve off with `mip_heuristic_effort=0` on HiGHS, as in the D5 spike.
-- **Warm start:** re-solve a perturbed instance (one task moves) using the previous solution as a `Start`. Report the work-unit difference against a cold start across seeds, honestly, even if it's "no measurable gain" (D8).
+- **Early stop:** stop after a given effort and return the best solution plus its gap. "Feasible but not proven optimal" is a normal result the caller can distinguish, not an error. Tests use an abstract effort limit, which maps to `WorkLimit` on Gurobi (D7, D5), and assert the shared result status "limit reached, feasible", not a backend's own status code. Because default instances solve at the root (D4), these tests also switch on one solve option that exposes the search: `Presolve=0, Cuts=0` on Gurobi, and presolve off with `mip_heuristic_effort=0` on HiGHS, as in the D5 proof of concept.
+- **Warm start:** re-solve a perturbed instance (one task moves) using the previous solution as a `Start`. Report the difference in work units (Gurobi's deterministic measure of solver effort, used instead of seconds) against a cold start across seeds, honestly, even if it's "no measurable gain" (D8).
 - **Infeasibility diagnosis:** compute an IIS on an infeasible instance and report the conflicting constraints readably (D9).
 - **Determinism:** pin `Seed` and `Threads`. Document that Gurobi's results depend on the thread count, and which settings make a run reproducible (D7).
+
+**Done when:** each of the four edges has a test: the early stop returns "limit reached, feasible" with a non-zero gap; the warm-start comparison runs and reports its numbers; the IIS names the conflicting constraints; two runs with the same `Seed` and `Threads` give the same node count.
 
 ## Step 6: Solver-agnostic fallback
 

@@ -2,27 +2,6 @@
 
 Check each feature through the lenses that apply to it before calling it done. When a question has no good answer, the feature isn't finished.
 
-## Where the lenses come from
-
-- **General software quality:** the nine product-quality characteristics of [ISO/IEC 25010:2023](https://www.iso.org/standard/78176.html) (names as listed by the [arc42 quality model](https://quality.arc42.org/standards/iso-25010)) and [Google's code-review guide](https://google.github.io/eng-practices/review/reviewer/looking-for.html).
-- **Optimisation practice:** Gurobi's [numerics guide](https://docs.gurobi.com/projects/optimizer/en/current/concepts/numericguide.html), its articles on [determinism](https://support.gurobi.com/hc/en-us/articles/360031636051) and [making accurate comparisons](https://support.gurobi.com/hc/en-us/articles/26992650628369), and the [parameter reference](https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html).
-- **Telemetry:** OpenTelemetry's [metric semantic conventions](https://opentelemetry.io/docs/specs/semconv/general/metrics/) and [naming rules](https://opentelemetry.io/docs/specs/semconv/general/naming/).
-- **The related work** in [related-work.md](related-work.md): what each family of projects pays attention to, and what it leaves out.
-
-### What related work covers and misses
-
-| Family | Lenses it covers well | Lenses it misses | What this repo takes from it |
-| --- | --- | --- | --- |
-| Academic papers (Tian 2022, Kiermaier 2020, Dall'Olio 2023, ...) | Formulation quality, solution methods for scale, realistic constraints (qualifications, breaks, teams) | Runnable code, reproducibility, telemetry, tests | Check the formulations and objectives against them |
-| Research code (AGH) | Performance at scale | Depends on CPLEX, a commercial solver. Tests and telemetry weren't checked. | Installability: everything must run on free tools |
-| Gurobi notebooks and optimods | Clear formulations, a gentle progression from simple to complex | Tests, determinism, time-limit and infeasibility handling and telemetry aren't their focus. Optimods hides the model. | Readable formulations, documented step by step |
-| OR-Tools examples, CP-SAT Primer | Breadth of model shapes, explanation of solver logs and parameters | Observability during the solve | Log literacy, backend comparison |
-| Timefold | Fast, practical rosters | No bound or gap, so no proof of optimality | Contrast for the gap-and-bound explainer |
-| gurobi-logtools, CP-SAT-Log-Analyzer | Reading solver progress after the fact | Live metrics, integration with an observability stack | Contrast: live metrics during the solve instead of parsing logs afterwards |
-| Commercial suite (INFORM GroundStar) | Operational fit: real-time re-planning, real labour rules | Everything is closed, so solver behaviour can't be inspected | Motivates warm start as a re-planning edge |
-
-The gap across all of them is the same one: no project treats solve behaviour (status, gap, bound, reproducibility, diagnosis) as something to observe and test.
-
 ## Lenses that apply
 
 Apply the first group to every feature, then the groups that match what the feature touches. Several lenses point to rules in [AGENTS.md](../AGENTS.md) rather than repeating them.
@@ -83,3 +62,24 @@ These lenses matter in related work, but not for this repo's purpose. If the sco
 | Authentication and multi-user state | ISO: security | Bound to `127.0.0.1`; one user. |
 | Privacy | ISO: security | No personal data. Generated IDs only, never real names. |
 | Cost, sustainability, internationalisation | Common architecture frameworks | No hosted infrastructure, no spend, English only. |
+
+## Where the lenses come from
+
+- **General software quality:** the nine product-quality characteristics of [ISO/IEC 25010:2023](https://www.iso.org/standard/78176.html) (names as listed by the [arc42 quality model](https://quality.arc42.org/standards/iso-25010)) and [Google's code-review guide](https://google.github.io/eng-practices/review/reviewer/looking-for.html).
+- **Optimisation practice:** Gurobi's [numerics guide](https://docs.gurobi.com/projects/optimizer/en/current/concepts/numericguide.html), its articles on [determinism](https://support.gurobi.com/hc/en-us/articles/360031636051) and [making accurate comparisons](https://support.gurobi.com/hc/en-us/articles/26992650628369), and the [parameter reference](https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html).
+- **Telemetry:** OpenTelemetry's [metric semantic conventions](https://opentelemetry.io/docs/specs/semconv/general/metrics/) and [naming rules](https://opentelemetry.io/docs/specs/semconv/general/naming/).
+- **The related work** in [related-work.md](related-work.md): what each family of projects pays attention to, and what it leaves out.
+
+### What related work covers and misses
+
+| Family | Lenses it covers well | Lenses it misses | What this repo takes from it |
+| --- | --- | --- | --- |
+| Academic papers (Tian 2022, Kiermaier 2020, Dall'Olio 2023, ...) | Formulation quality, solution methods for scale, realistic constraints (qualifications, breaks, teams) | Runnable code, reproducibility, telemetry, tests | Check the formulations and objectives against them |
+| Research code (AGH) | Performance at scale | Depends on CPLEX, a commercial solver. Tests and telemetry weren't checked. | Installability: everything must run on free tools |
+| Gurobi notebooks and optimods | Clear formulations, a gentle progression from simple to complex | Tests, determinism, time-limit and infeasibility handling and telemetry aren't their focus. Optimods hides the model. | Readable formulations, documented step by step |
+| OR-Tools examples, CP-SAT Primer | Breadth of model shapes, explanation of solver logs and parameters | Observability during the solve | Log literacy, backend comparison |
+| Timefold | Fast, practical rosters | No bound or gap, so no proof of optimality | Contrast for the gap-and-bound explainer |
+| gurobi-logtools, CP-SAT-Log-Analyzer | Reading solver progress after the fact | Live metrics, integration with an observability stack | Contrast: live metrics during the solve instead of parsing logs afterwards |
+| Commercial suite (INFORM GroundStar) | Operational fit: real-time re-planning, real labour rules | Everything is closed, so solver behaviour can't be inspected | Motivates warm start as a re-planning edge |
+
+The gap across all of them is the same one: no project treats solve behaviour (status, gap, bound, reproducibility, diagnosis) as something to observe and test.

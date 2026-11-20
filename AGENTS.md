@@ -14,6 +14,15 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 - All tests must pass with no OpenTelemetry collector running; telemetry falls back to stdout. `uv run pytest` must need no Docker, no Node and no browser.
 - Call `model.update()` before reading model size (`NumVars`, `NumConstrs`) or calling `copy()` or `relax()`. gurobipy applies changes lazily, so before `update()` the size reads 0 and a copy or relaxation is missing the pending constraints.
 
+## Do NOT build
+
+- No job queue, database, authentication or multi-user state. Runs live in memory and are lost on restart.
+- No container for the app itself. Docker Compose runs only the `grafana/otel-lgtm` observability stack.
+- No Kubernetes, CI/CD or cloud deployment (single developer, local only).
+- No WebSockets. Progress is pushed over SSE; everything else is plain requests.
+- No notebooks, and no Sudoku, N-queens or puzzle demos.
+- No models beyond the two above.
+
 ## Conventions
 
 - `uv` for dependencies and for running everything. Never `pip install`.
@@ -94,9 +103,9 @@ Don't write, and remove, comments that are:
 
 If a comment is borderline, delete it rather than rewording it. Be most sceptical of comments you wrote yourself. No commented-out code, no `TODO` placeholders, no dead code.
 
-## Development steps
+## Workflow for every change
 
-Build one module at a time:
+Build one module at a time. (These are the steps for each change, not the project steps in `docs/plan.md`.)
 
 1. Write the simplest version that meets the requirement.
 2. Lint and format: `uv run ruff check --fix . && uv run ruff format .`
@@ -106,15 +115,6 @@ Build one module at a time:
 6. Reread the diff and remove anything the task didn't require.
 
 When a verification fails, fix it and re-verify before reporting done.
-
-## Do NOT build
-
-- No job queue, database, authentication or multi-user state. Runs live in memory and are lost on restart.
-- No container for the app itself. Docker Compose runs only the `grafana/otel-lgtm` observability stack.
-- No Kubernetes, CI/CD or cloud deployment (single developer, local only).
-- No WebSockets. Progress is pushed over SSE; everything else is plain requests.
-- No notebooks, and no Sudoku, N-queens or puzzle demos.
-- No models beyond the two above.
 
 ## README framing (non-negotiable opening)
 

@@ -2,11 +2,11 @@
 
 I'm a backend/platform engineer picking up Gurobi — I'm not an optimisation modeller. The models here are small and textbook, chosen because airport ground operations has the clearest real-world assignment and covering problems. The part I care about is what surrounds the solve: telemetry, deterministic tests, time limits, warm starts, infeasibility diagnosis.
 
-> **Status: planning.** Nothing below is built yet. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
+> **Status: planning, before Step 1.** Nothing below is built yet. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
 
 ## What it does (planned)
 
-At an airport, ground staff unload and load baggage between flights. Each task has a fixed start time, so someone has to decide **who does which task**, without anyone being in two places at once. Everyone has a shift, and any work outside it is **overtime**, which costs money. The first model finds the schedule with the least overtime. The second answers a simpler question: **how many people to roster on each shift pattern** so there are enough on duty in every half hour of the day.
+At an airport, ground staff unload and load baggage between flights. Each task has a fixed start time, so someone has to decide **who does which task**, without anyone being in two places at once. Everyone has a shift, and any work outside it is **overtime**, which costs money. The first model (**Model 1**, task assignment) finds the schedule with the least overtime. The second (**Model 2**, shift coverage) answers a simpler question: **how many people to roster on each shift pattern** so there are enough on duty in every half hour of the day.
 
 You describe the rules ("every task gets exactly one person", "nobody does two overlapping tasks", "minimise overtime") and a **solver** searches for the best schedule. While it searches, it tracks two numbers:
 
@@ -19,10 +19,24 @@ The difference between them is the **gap**. When the gap closes, the solver has 
 - **Inspect the answer:** a timeline per person shows their tasks and highlights the overtime, so you can judge whether the schedule makes operational sense.
 - **Diagnose infeasibility:** when no schedule is possible, it shows *which* tasks and people clash, instead of just failing.
 
+## Terms used below
+
+- **Warm start:** starting the solver from a known solution, such as the previous schedule, instead of from nothing.
+- **IIS** (irreducible inconsistent subsystem): a smallest set of constraints that can't all hold at once. Remove any one of them and the rest can be satisfied, so it pinpoints why a problem is infeasible.
+- **LP relaxation:** the same problem with the whole-number requirements dropped (allowing, say, half a person on a task). It's fast to solve, and its answer is where the bound comes from.
+- **Presolve:** simplifications the solver makes before it starts searching.
+- **Cuts:** extra constraints the solver adds to tighten the LP relaxation, which raises the bound.
+- **Symmetry:** many equivalent solutions, such as two identical handlers swapped, which the solver may waste time exploring separately.
+- **Root node:** the first step of the search, before any branching. "Solved at the root" means no search was needed.
+- **Work units:** Gurobi's deterministic measure of effort. Unlike seconds, the same run always takes the same work.
+- **HiGHS:** a free, open-source solver, used here as the fallback.
+- **OTLP:** OpenTelemetry's protocol for sending metrics, traces and logs to a collector.
+- **SSE** (server-sent events): a standard way for a web server to push a stream of updates to a browser.
+
 ## How it fits together (planned)
 
 ```
-  browser (React UI) ──HTTP/SSE──▶ FastAPI (/api, 127.0.0.1)
+  browser (React UI) ──HTTP/SSE──▶ FastAPI (/api, 127.0.0.1)      ← optional, later
                                       │  one Gurobi environment per run
   CLI (ground-ops solve) ────────▶ core library
                                       ├─ instance generators (seeded)
@@ -33,6 +47,7 @@ The difference between them is the **gap**. When the gap closes, the solver has 
                                             ▼                     ▼
                           docker compose: grafana/otel-lgtm     stdout
                           (Prometheus, Tempo, Loki, Grafana)
+                          ← optional, later
 ```
 
 - **Core library (Python):** seeded instance generators, the two models, and one thin backend protocol with two implementations: Gurobi, and [HiGHS](https://github.com/ERGO-Code/HiGHS) as the open-source fallback. A solver callback emits the gap, incumbent, bound, incumbent improvements, node count, simplex iterations and elapsed time.
@@ -43,7 +58,7 @@ The difference between them is the **gap**. When the gap closes, the solver has 
 
 The core never depends on the optional layers. `uv run pytest` needs no Docker, no Node and no browser.
 
-## The free licence
+## The free Gurobi licence
 
 The `gurobipy` package from PyPI includes a size-limited licence: **2,000 variables and 2,000 linear constraints** (200 variables if there are quadratic terms), "for research, development, and evaluation purposes only" ([Gurobi: size limits](https://support.gurobi.com/hc/en-us/articles/360051597492), [Gurobi: restricted licence](https://support.gurobi.com/hc/en-us/articles/29682074018833)). Every instance in this repo will fit within it, so nothing will need a paid or academic licence.
 
@@ -65,7 +80,7 @@ A stuck solve means different things depending on which number is stuck:
 | **Bound won't move** | The solver can't prove the current answer is good | The formulation: a weak LP relaxation, symmetry. Usually a modelling question. |
 | Both stuck, gap large | Both of the above | Try a smaller instance first |
 
-One measured run shows the pattern. Model 1 with 30 tasks, presolve and cuts switched off so the search is visible, one thread, on an Apple M4 Pro: by 0.2 seconds the incumbent had fallen from 405 to 55, which turned out to be optimal, and the bound had risen from 0 to 35. Closing the rest of the gap, raising the bound from 35 to 55, took another 3.5 seconds. **The answer was found almost at once. Nearly all the time went into proving it.** With default settings, Gurobi 14 solved all 99 instances tried at the root node, in milliseconds (Model 1 with 20 to 35 tasks and Model 2 with 32 or 48 slots, 20 seeds each). That's why the visible-search demos switch presolve and cuts off ([design decision 4](docs/design-decisions.md)).
+One measured run shows the pattern. Model 1 with 30 tasks, presolve and cuts switched off so the search is visible, one thread, on an Apple M4 Pro: by 0.2 seconds the incumbent had fallen from 405 to 55, which turned out to be optimal, and the bound had risen from 0 to 35. Closing the rest of the gap, raising the bound from 35 to 55, took another 3.5 seconds. **The answer was found almost at once. Nearly all the time went into proving it.** With default settings, Gurobi 14 solved all 99 instances tried at the root node, in milliseconds (Model 1 with 20 to 35 tasks and Model 2 with 32 or 48 slots, 20 seeds each). That's why the visible-search demos switch presolve and cuts off ([design decision 4](docs/design-decisions.md#4-making-the-search-visible)).
 
 ## What it deliberately doesn't do
 
@@ -77,11 +92,14 @@ One measured run shows the pattern. Model 1 with 30 tasks, presolve and cuts swi
 
 ## Docs
 
+Working on the repo? Start with [AGENTS.md](AGENTS.md) for the rules, then [docs/plan.md](docs/plan.md) for what to build.
+
+
 - [Plan](docs/plan.md): what gets built, step by step.
 - [Design decisions](docs/design-decisions.md): each choice, with alternatives, measurements and confidence.
 - [Quality lenses](docs/quality-lenses.md): the checks every feature must pass.
 - [Related work](docs/related-work.md): existing projects and papers, and where this repo differs.
 
-## Licence
+## Licence (MIT)
 
 MIT. The licence file arrives with the project setup in Step 1.

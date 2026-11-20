@@ -2,35 +2,37 @@
 
 Each topic below lists the alternatives, compares them, recommends one, and rates the confidence in that recommendation. Where confidence isn't high, it says what would raise it.
 
+**Contributors:** you don't need to read this file end to end. [plan.md](plan.md) cites a decision number (D1 to D21) wherever one applies; read those sections only.
+
 All measurements come from throwaway proof-of-concept scripts run on 2026-11-20. Those scripts aren't in the repo. The key numbers will be re-measured by reproducible scripts in `experiments/`, as listed in [plan.md](plan.md). Settings: Apple M4 Pro, macOS (Darwin 25.6), Python 3.12.12, gurobipy 14.0.0, ortools 9.15.6755, highspy 1.16.0, PuLP 4.3.1, opentelemetry-sdk 1.45.2, `Threads=1` unless stated. Every timing is from one machine, so it shows relative differences only. Work units are Gurobi's deterministic effort measure, so they compare cleanly across runs; wall-clock seconds don't.
 
 **Confidence levels.** **High** (85% or more) means measured here, or confirmed by primary docs, with nothing contradicting it. **Medium** (60–85%) means one instance family, a secondary source, or a judgement call. **Low** (below 60%) means a plausible guess.
 
 ## Summary
 
-| # | Topic | Recommendation | Confidence |
-| --- | --- | --- | --- |
-| 1 | gurobipy version and licence | Pin `gurobipy~=14.0`; document the free licence's 2028-11-29 expiry | High (90%) |
-| 2 | Model 1 objective | Overtime: minutes worked outside each handler's shift window, as a per-assignment cost (accepted) | High (90%) |
-| 3 | Model 1 no-overlap constraints | Pairwise constraints in the package; the clique form as a documented experiment | High (85%) |
-| 4 | Making the search visible | Document that instances solve at the root; demos and early-stop tests use `Presolve=0, Cuts=0` | High (90%) |
-| 5 | Fallback backend | HiGHS via `highspy` (accepted) | High (90%) |
-| 6 | Telemetry metrics and instruments | A core set every backend reports, plus named optional fields; observable gauges for active runs (D21) | High (85%) |
-| 7 | Early-stop test | An effort limit (`WorkLimit` on Gurobi), asserting the shared "limit reached, feasible" status and a non-zero gap | High (95%) |
-| 8 | Warm start | `Start` attribute; report work units across seeds; expect a small effect | Medium (80%) |
-| 9 | Infeasibility diagnosis | Gurobi IIS; the fallback reports the capability as unavailable | High (90%) |
-| 10 | Golden tests | Assert the objective and feasibility, never a specific assignment | High (95%) |
-| 11 | Instance realism | Base task durations on the turnaround dataset in related work | High (85%) |
-| 12 | Domain glossary | `docs/domain.md` | High (90%) |
-| 13 | Log walkthrough | `docs/reading-the-log.md`, built from a real log produced by this repo | High (85%) |
-| 14 | Experiment journal | Scripts in `experiments/`, results in `docs/experiments.md` (accepted) | High (90%) |
-| 15 | Where the bound comes from | Teach it through decisions 3 and 4, with no extra code | High (85%) |
-| 16 | Observability stack | `grafana/otel-lgtm` in Docker Compose; OTLP over HTTP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, stdout otherwise | High (85%) |
-| 17 | API | FastAPI under `/api` on `127.0.0.1`; one Gurobi environment per run; cancel through `terminate()` | High (85%) |
-| 18 | Progress transport | SSE for progress; plain requests for everything else | High (85%) |
-| 19 | UI library | React with Vite and TypeScript | Medium (75%) |
-| 20 | UI serving and API types | Vite dev proxy while developing; FastAPI serves the built UI; types generated with openapi-typescript | Medium (80%) |
-| 21 | Run identity in telemetry | A `run_id` unique across processes, as a metric attribute on observable gauges for active runs only, with a raised cap | High (85%) |
+| # | Area | Topic | Recommendation | Confidence |
+| --- | --- | --- | --- | --- |
+| 1 | Licence and models | gurobipy version and licence | Pin `gurobipy~=14.0`; document the free licence's 2028-11-29 expiry | High (90%) |
+| 2 | Licence and models | Model 1 objective | Overtime: minutes worked outside each handler's shift window, as a per-assignment cost (decided) | High (90%) |
+| 3 | Licence and models | Model 1 no-overlap constraints | Pairwise constraints in the package; the clique form as a documented experiment | High (85%) |
+| 4 | Solver behaviour and tests | Making the search visible | Document that instances solve at the root; demos and early-stop tests use `Presolve=0, Cuts=0` | High (90%) |
+| 5 | Solver behaviour and tests | Fallback backend | HiGHS via `highspy` (decided) | High (90%) |
+| 6 | Solver behaviour and tests | Telemetry metrics and instruments | A core set every backend reports, plus named optional fields; observable gauges for active runs (D21) | High (85%) |
+| 7 | Solver behaviour and tests | Early-stop test | An effort limit (`WorkLimit` on Gurobi), asserting the shared "limit reached, feasible" status and a non-zero gap | High (95%) |
+| 8 | Solver behaviour and tests | Warm start | `Start` attribute; report work units across seeds; expect a small effect | Medium (80%) |
+| 9 | Solver behaviour and tests | Infeasibility diagnosis | Gurobi IIS; the fallback reports the capability as unavailable | High (90%) |
+| 10 | Solver behaviour and tests | Golden tests | Assert the objective and feasibility, never a specific assignment | High (95%) |
+| 11 | Licence and models | Instance realism | Base task durations on the turnaround dataset in related work | High (85%) |
+| 12 | Licence and models | Domain glossary | `docs/domain.md` | High (90%) |
+| 13 | Docs and experiments | Log walkthrough | `docs/reading-the-log.md`, built from a real log produced by this repo | High (85%) |
+| 14 | Docs and experiments | Experiment journal | Scripts in `experiments/`, results in `docs/experiments.md` (decided) | High (90%) |
+| 15 | Docs and experiments | Where the bound comes from | Teach it through decisions 3 and 4, with no extra code | High (85%) |
+| 16 | Optional layers | Observability stack | `grafana/otel-lgtm` in Docker Compose; OTLP over HTTP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, stdout otherwise | High (85%) |
+| 17 | Optional layers | API | FastAPI under `/api` on `127.0.0.1`; one Gurobi environment per run; cancel through `terminate()` | High (85%) |
+| 18 | Optional layers | Progress transport | SSE for progress; plain requests for everything else | High (85%) |
+| 19 | Optional layers | UI library | React with Vite and TypeScript | Medium (75%) |
+| 20 | Optional layers | UI serving and API types | Vite dev proxy while developing; FastAPI serves the built UI; types generated with openapi-typescript | Medium (80%) |
+| 21 | Optional layers | Run identity in telemetry | A `run_id` unique across processes, as a metric attribute on observable gauges for active runs only, with a raised cap | High (85%) |
 
 ## 1. gurobipy version and licence
 
@@ -53,12 +55,12 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 | **Overtime outside the shift window** (cost per handler–task pair) | Yes | T=35 tasks, H=12 handlers: 420 variables, 1,787 constraints | Textbook assignment with costs |
 | Overtime as total load beyond regular hours (a continuous variable per handler) | Yes, plus H variables | Similar | Convex; the LP relaxation solved it exactly in every run |
 | Travel between consecutive tasks (successor arcs) | No, needs arc variables | Over 2,000 variables already at T=25 (2,547), and 1,344 at T=20 | Close to vehicle routing |
-| Distance from a handler's home stand (an assignment cost) | Yes | Same as the first option | Doesn't capture "between consecutive tasks", so it would misstate the brief |
-| Minimise handlers used | Yes | Similar | Not a cost the brief names |
+| Distance from a handler's home stand (an assignment cost) | Yes | Same as the first option | Doesn't capture "between consecutive tasks", so it would misstate the plan |
+| Minimise handlers used | Yes | Similar | Not a cost the plan names |
 
 **Recommendation.** Overtime outside each handler's shift window. Record the choice and the reason in the README.
 
-**Confidence: High (90%).** The sizes are measured, and the recommendation was accepted. [Tian 2022](https://doi.org/10.1371/journal.pone.0279131) also supports it: tasks are assigned to shifts with start times and durations, and it notes that extending a shift by 30 minutes "is very common".
+**Confidence: High (90%).** The sizes are measured, and the choice is decided. [Tian 2022](https://doi.org/10.1371/journal.pone.0279131) also supports it: tasks are assigned to shifts with start times and durations, and it notes that extending a shift by 30 minutes "is very common".
 
 ## 3. Model 1 no-overlap constraints
 
@@ -76,7 +78,7 @@ Measured on seeded instances with a uniform 10-minute gap between tasks:
 | Clique per time point | LP bound equalled the optimum in every case; few constraints | Needs conflicts to form an interval graph, so no travel-dependent gaps; less obvious |
 | Time-indexed slots | Uniform with Model 2 | Many more variables; rounds the times |
 
-**Recommendation.** Pairwise in the package, because the brief says textbook and obvious. Run the clique form once as a recorded experiment (decision 14). It is the clearest demonstration in this repo of the formulation affecting the bound.
+**Recommendation.** Pairwise in the package, because the plan asks for a textbook, obvious formulation. Run the clique form once as a recorded experiment (decision 14). It is the clearest demonstration in this repo of the formulation affecting the bound.
 
 **Confidence: High (85%).** The bounds are measured. The clique form's "LP equals optimum" result held on every instance tried, but wasn't proven in general.
 
@@ -108,11 +110,11 @@ Measured on the same Model 1 instance:
 
 CP-SAT also accepts only integer coefficients ([CP-SAT Primer](https://github.com/d-krupke/cpsat-primer)). That's fine for whole-minute costs, but it means a second way of modelling.
 
-**Recommendation.** HiGHS through `highspy` directly. It's the same kind of solver as Gurobi (LP-based branch-and-cut), it exposes all six metrics from the brief live, it's deterministic and MIT-licensed, and it adds no modelling layer.
+**Recommendation.** HiGHS through `highspy` directly. It's the same kind of solver as Gurobi (LP-based branch-and-cut), it exposes all six metrics the plan asks for, live, it's deterministic and MIT-licensed, and it adds no modelling layer.
 
-Your brief named CP-SAT or PuLP. If you'd rather stay within those two, choose PuLP with HiGHS: it uses the same engine, with an extra layer.
+The original requirements named CP-SAT or PuLP. Within those two, PuLP with HiGHS is the closest fit: the same engine, with an extra layer.
 
-**Confidence: High (90%).** A spike ran Model 1 on both backends behind one `Protocol` with one frozen result type, and the same feasibility checks passed on both. Optimal: both returned objective 55 with gap 0. Early stop: Gurobi `WorkLimit=0.05` gave a feasible result with gap 0.727; HiGHS `mip_max_nodes=20` gave gap 0.364, the same bound on two runs, with HiGHS reporting the status as `kSolutionLimit`. Infeasible: Gurobi returned a 22-constraint IIS; HiGHS returned the IIS as unavailable.
+**Confidence: High (90%).** A spike (a throwaway proof of concept) ran Model 1 on both backends behind one `Protocol` with one frozen result type, and the same feasibility checks passed on both. Optimal: both returned objective 55 with gap 0. Early stop: Gurobi `WorkLimit=0.05` gave a feasible result with gap 0.727; HiGHS `mip_max_nodes=20` gave gap 0.364, the same bound on two runs, with HiGHS reporting the status as `kSolutionLimit`. Infeasible: Gurobi returned a 22-constraint IIS; HiGHS returned the IIS as unavailable.
 
 **Design consequence:** the deterministic early stop is backend-specific (`WorkLimit` against `mip_max_nodes`). The protocol takes an abstract effort limit, and each backend maps it to its own option.
 
@@ -134,7 +136,7 @@ Gurobi codes are from the [callback codes reference](https://docs.gurobi.com/pro
 | --- | --- | --- |
 | **Core set (incumbent, bound, gap, improvements, elapsed) plus optional named fields (nodes, iterations, work)** | Every backend can report the core; nothing is faked | The optional fields need handling |
 | Gurobi's full set, everywhere | Richest | The fallback would have to fake values |
-| Only what all backends share | Simplest | Loses nodes and iterations, which the brief asks for |
+| Only what all backends share | Simplest | Loses nodes and iterations, which the plan asks for |
 
 Instruments, measured with `InMemoryMetricReader` on SDK 1.45.2: a synchronous gauge (`create_gauge`) for gap, incumbent, bound, nodes and iterations, and a counter for improvements. Both export correctly. On the callback itself, Model 1 (T=30, seeds 0–2) took identical work and node counts with and without it, and runtime changed by −2% to +4%. The final sample matched `ObjVal`, `ObjBound` and `NodeCount` exactly. Names: OpenTelemetry's registry has no `solver` namespace, and its rules ask for lowercase, dot-separated, namespaced names with UCUM units ([naming](https://opentelemetry.io/docs/specs/semconv/general/naming/)).
 
@@ -178,13 +180,13 @@ A partial `Start`, which leaves the moved task's variables undefined, gave a med
 
 Measured: Model 1 with 3 handlers (fewer than the peak overlap) is infeasible. Gurobi's `computeIIS` returned 22 of 324 constraints, with names such as `cover[0]` and `no_overlap[h0,t0,t3]`. `feasRelax` on the cover constraints alone ([Model API](https://docs.gurobi.com/projects/optimizer/en/current/reference/python/model.html)) gave a minimum total violation of 9.
 
-| Option | What it tells you | Available on |
+| Option | What it reports | Available on |
 | --- | --- | --- |
 | **IIS** | Which constraints conflict | Gurobi only (HiGHS: LP only) |
 | `feasRelax` | The cheapest way to violate constraints | Gurobi |
 | Elastic cover (penalised slack variables in the model) | Which tasks can't be covered | Any backend |
 
-**Recommendation.** An IIS on Gurobi, as the brief asks, with readable constraint names. The fallback reports "IIS unavailable" in its result. `feasRelax` and an elastic cover are optional later additions.
+**Recommendation.** An IIS on Gurobi, as the plan requires, with readable constraint names. The fallback reports "IIS unavailable" in its result. `feasRelax` and an elastic cover are optional later additions.
 
 **Confidence: High (90%).**
 
@@ -232,7 +234,7 @@ The [turnaround dataset](https://github.com/spadrona/airport_ground_handling_dat
 
 | Option | Pros | Cons |
 | --- | --- | --- |
-| **`docs/reading-the-log.md`, built from a real log produced by this repo** | Serves your stated goal directly; reproducible | Must be regenerated if the model changes |
+| **`docs/reading-the-log.md`, built from a real log produced by this repo** | Serves the repo's stated goal directly; reproducible | Must be regenerated if the model changes |
 | Link to [Gurobi's MIP logging docs](https://docs.gurobi.com/projects/optimizer/en/current/concepts/logging/mip.html) only | No upkeep | Not tied to this repo's models |
 | gurobi-logtools plots | Visual | Adds a dependency and a plotting stack |
 
@@ -250,7 +252,7 @@ The [turnaround dataset](https://github.com/spadrona/airport_ground_handling_dat
 
 **Recommendation.** The first option. The measurements in this doc are the first entries.
 
-**Confidence: High (90%).** A top-level `experiments/` directory was accepted. The flat-layout rule applies to the package, not to scripts.
+**Confidence: High (90%).** A top-level `experiments/` directory is decided. The flat-layout rule applies to the package, not to scripts.
 
 ## 15. Where the bound comes from
 
@@ -361,7 +363,7 @@ Measured with opentelemetry-sdk 1.45.2's in-memory reader, plus one run against 
 
 Even with an observable gauge, the default cap still overflowed after 2,000 runs, because the SDK keeps every attribute set it has seen. That's why option 3 needs the raised cap.
 
-**Recommendation.** Option 3. The run ID is the process start time plus a counter (for example `1795203617-3`), so it stays unique when each CLI run is its own process. A plain counter would restart at 1 in every process and put every CLI run on the same series. Grafana filters on `run_id`. This changes lens 12 from "no per-run IDs" to "one ID per run, unique across processes, on active-only instruments, with an explicit cap".
+**Recommendation.** Option 3. The run ID is the process start time plus a counter (for example `1795203617-3`), so it stays unique when each CLI run is its own process. A plain counter would restart at 1 in every process and put every CLI run on the same series. Grafana filters on `run_id`. Lens 12 states the rule: one ID per run, unique across processes, on active-only instruments, with an explicit cap.
 
 **Confidence: High (85%).** Measured. The open question is Prometheus with many short-lived series over long periods, which doesn't affect a local tool.
 
