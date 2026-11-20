@@ -33,7 +33,7 @@ def _turnaround_tasks(rng: random.Random, first_id: int) -> tuple[Task, Task]:
 
 def peak_concurrency(tasks: tuple[Task, ...]) -> int:
     """The most tasks that pairwise conflict at one moment: the fewest handlers that can cover them all."""
-    return max(sum(1 for t in tasks if t.start <= p.start < t.end + GAP_MINUTES) for p in tasks)
+    return max((sum(1 for t in tasks if t.start <= p.start < t.end + GAP_MINUTES) for p in tasks), default=0)
 
 
 def generate_assignment(n_tasks: int, seed: int) -> AssignmentInstance:

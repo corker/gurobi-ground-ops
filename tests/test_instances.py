@@ -29,6 +29,10 @@ def test_task_durations_stay_within_the_dataset_ranges() -> None:
     assert all(t.start >= ARRIVALS_FROM for t in unloads)
 
 
+def test_no_tasks_need_no_handlers() -> None:
+    assert peak_concurrency(()) == 0
+
+
 def test_instance_has_one_spare_handler_beyond_peak_concurrency() -> None:
     instance = generate_assignment(30, seed=1)
     assert len(instance.handlers) == peak_concurrency(instance.tasks) + 1

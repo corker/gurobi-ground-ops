@@ -39,5 +39,6 @@ def coverage_shortfalls(instance: CoverageInstance, staffing: Mapping[int, int])
 
 
 def total_paid_slots(instance: CoverageInstance, staffing: Mapping[int, int]) -> int:
+    """Total paid half-hours of a valid staffing; check `coverage_shortfalls` first."""
     patterns = {p.id: p for p in instance.patterns}
     return sum(n * paid_slots(patterns[p]) for p, n in staffing.items())
