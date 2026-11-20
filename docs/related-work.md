@@ -6,9 +6,9 @@ As of 2026-11-20.
 
 No public project found combines the three things this repo is built around: airport ground-ops models, live solver telemetry, and tested operational edges (time limits, warm starts, IIS, determinism). Each part exists somewhere, but separately.
 
-- **The models exist.** Academic papers formulate ground-staff task assignment and shift covering, and Gurobi publishes workforce scheduling examples. They rarely come with tested, runnable code.
+- **The models exist.** Academic papers formulate ground-staff task assignment and shift covering, but rarely publish code. Gurobi publishes workforce scheduling examples, but as notebooks without tests.
 - **Telemetry exists only after the solve.** Gurobi's gurobi-logtools parses log files once the solve is over. No project was found that streams callback metrics such as gap, bound and incumbent to OpenTelemetry or Prometheus while the solve runs.
-- **Commercial ground-handling suites are closed source.** They show the problem is real, but offer nothing to learn solver behaviour from.
+- **The commercial suite checked is closed source.** It shows the problem is real, but offers nothing to learn solver behaviour from.
 
 These are references, not competitors. The repo is for learning, so the useful questions are what to read, what to check the models against, and which part nobody has covered yet: live telemetry.
 
@@ -16,7 +16,7 @@ These are references, not competitors. The repo is for learning, so the useful q
 
 A project counts as related if it is public code or a paper on airport ground-staff assignment or covering, Gurobi learning material on workforce problems, or a tool for watching solver progress. Sources checked: GitHub search and the GitHub API, PyPI, Crossref, and vendor pages.
 
-Two papers sit behind paywalls or bot checks, so for those only the abstract and metadata were used. A search that finds nothing doesn't prove nothing exists. Read "none found" as "none found in these searches".
+Paper details come from open abstracts where available, otherwise from titles and Crossref metadata; no full texts were read. A search that finds nothing doesn't prove nothing exists. Read "none found" as "none found in these searches".
 
 ## Airport ground-ops optimisation
 
@@ -74,7 +74,7 @@ Timefold is the clearest contrast. It uses metaheuristics to produce good roster
 
 ## Solver telemetry and log analysis
 
-Existing tools read logs after the solve finishes. None were found that export live callback metrics to an observability stack, so that is the part this repo adds.
+Existing tools read logs after the solve finishes. None were found that export live callback metrics to an observability stack, so that is the part this repo aims to add.
 
 | Tool | What it does | When | Version / activity | Licence |
 | --- | --- | --- | --- | --- |
@@ -123,12 +123,4 @@ Every neighbour focuses on the model, the data or the log after the fact. This r
 
 ## Sources
 
-Pages opened on 2026-11-20 (GitHub metadata through the GitHub API, versions from PyPI, paper metadata from Crossref):
-
-- [From gate to runway (University of Twente record)](https://research.utwente.nl/en/publications/from-gate-to-runway-a-systematic-review-of-airport-ground-operati/)
-- [Tian et al. abstract (IDEAS/RePEc)](https://ideas.repec.org/a/plo/pone00/0279131.html)
-- [gurobi-optimods Workforce Scheduling docs](https://gurobi-optimods.readthedocs.io/en/latest/mods/workforce.html)
-- [Gurobi Swissport case study](https://www.gurobi.com/case_studies/swissport-automating-airport-staff-scheduling/)
-- [Gurobi Python callback example](https://docs.gurobi.com/projects/examples/en/current/examples/python/callback.html)
-- [INFORM ground-handling resource management](https://inform-software.com/aviation/gs-rms)
-- READMEs of [RoyalSkye/AGH](https://github.com/RoyalSkye/AGH), [spadrona dataset](https://github.com/spadrona/airport_ground_handling_dataset), [Gurobi workforce example](https://github.com/Gurobi/modeling-examples/tree/master/workforce) and [gurobi-logtools](https://github.com/Gurobi/gurobi-logtools)
+All sources are linked inline. GitHub metadata came from the GitHub API, versions from PyPI and paper metadata from Crossref, all on 2026-11-20.
