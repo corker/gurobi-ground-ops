@@ -26,10 +26,10 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 ## Conventions
 
 - `uv` for dependencies and for running everything. Never `pip install`.
-- Python 3.12+. Type hints on all function signatures.
-- Flat package layout. No sub-packages unless a file exceeds ~500 lines. Reproducible experiment scripts live in a top-level `experiments/` directory, outside the package.
+- Python 3.12+. Type hints on all function signatures, enforced by ruff's `ANN` rules and `mypy --strict`. gurobipy ships type stubs, but `setParam` values aren't type-checked, so parameter names and values need tests.
+- One package in a src layout (`src/ground_ops/`), with tests in `tests/`. No sub-packages unless a file exceeds ~500 lines. Reproducible experiment scripts live in a top-level `experiments/` directory, outside the package.
 - Project docs live in `docs/`: `related-work.md` for existing projects and literature, `quality-lenses.md` for the checks every feature must pass, `plan.md` for what to build and when each step is done, `design-decisions.md` for decisions with their evidence and confidence, plus design docs as they're written.
-- The UI lives in `ui/`: React, Vite and strict TypeScript, managed with `npm`, tested with Vitest and Testing Library, linted with oxlint. Node is needed only for the UI. TypeScript types for API payloads are generated from FastAPI's OpenAPI schema, not written by hand.
+- The UI lives in `ui/`: React, Vite and strict TypeScript, managed with `npm`, tested with Vitest and Testing Library, linted with oxlint, formatted with Prettier. `npm run check` in `ui/` must pass before a UI change is done (D22). Node is needed only for the UI. TypeScript types for API payloads are generated from FastAPI's OpenAPI schema, not written by hand.
 - The API lives under `/api` and binds to `127.0.0.1` only. A streaming endpoint checks that the run exists before it starts streaming.
 - MIT licence.
 
@@ -107,13 +107,15 @@ If a comment is borderline, delete it rather than rewording it. Be most sceptica
 Build one module at a time. (These are the steps for each change, not the project steps in `docs/plan.md`.)
 
 1. Write the simplest version that meets the requirement.
-2. Lint and format: `uv run ruff check --fix . && uv run ruff format .`
-3. Test: `uv run pytest`.
+2. Fix lint and formatting: `uv run ruff check --fix . && uv run ruff format .`
+3. Run the full check, which must pass before a change is done: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`. The ruff rule set and mypy's strict mode are configured in `pyproject.toml`; don't loosen them to make a change pass. From Step 2 on, read the coverage report for untested branches; coverage is a signal, not a target.
 4. Run the changed code directly (`uv run python -c "..."` or a throwaway script), covering the normal case and the edges: an empty instance, one handler with one task, zero demand, an infeasible instance, an effort limit too small to prove optimality. Look for what the tests miss: a wrong branch, an off-by-one at a time-slot boundary, a silent `None` or NaN, a raw solver exception leaking out. If code can't be exercised without heavy setup, say so instead of guessing.
 5. Check the feature against the lenses in `docs/quality-lenses.md` that apply to it.
 6. Reread the diff and remove anything the task didn't require.
 
 When a verification fails, fix it and re-verify before reporting done.
+
+After each plan step, have a reviewer with no context from the work read the step's diff against this file and the lenses, reading every file from disk, and fix what it finds.
 
 ## README framing (non-negotiable opening)
 

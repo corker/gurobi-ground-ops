@@ -1,6 +1,6 @@
 # Implementation plan
 
-What to build, in order, and when each step counts as done. The rules for *how* to build live in [AGENTS.md](../AGENTS.md). The reasons behind each choice live in [design-decisions.md](design-decisions.md), referred to below as D1 to D21. Every step is checked against the lenses in [quality-lenses.md](quality-lenses.md) that apply to it.
+What to build, in order, and when each step counts as done. The rules for *how* to build live in [AGENTS.md](../AGENTS.md). The reasons behind each choice live in [design-decisions.md](design-decisions.md), referred to below as D1 to D22. Every step is checked against the lenses in [quality-lenses.md](quality-lenses.md) that apply to it.
 
 **The goal.** Afterwards, the owner can talk about solver behaviour without bluffing: read a Gurobi log, explain what the MIP gap and the bound are doing, and tell a formulation problem from an operational one. The code is the means, not the deliverable.
 
@@ -10,7 +10,7 @@ What to build, in order, and when each step counts as done. The rules for *how* 
 
 | Step | Goal | Status |
 | --- | --- | --- |
-| 1 | Project setup: package and a smoke test that proves the free licence works | Not started |
+| 1 | Project setup: package and a smoke test that proves the free licence works | Done |
 | 2 | Model 1, task assignment, with golden tests and the CLI | Not started |
 | 3 | Model 2, shift coverage | Not started |
 | 4 | Solver telemetry (the most important step) | Not started |
@@ -27,7 +27,7 @@ Update this table in the same commit that finishes a step.
 The licence limits are already verified (D1): 2,000 variables and 2,000 linear constraints, with the gurobipy 14 licence expiring on 2028-11-29.
 
 - Create the project with `uv init --package --name ground-ops`: a `src/ground_ops/` package, the `uv_build` backend, and a `ground-ops` command. `requires-python = ">=3.12"`, and `.python-version` set to `3.12`. Remove the generated hello-world entry point and stub; the `ground-ops` command arrives with `solve` in Step 2.
-- Step 1 adds only what Step 1 uses: `gurobipy~=14.0`, plus `pytest` and `ruff` as dev dependencies, with ruff's default settings. Each later step adds its own dependencies when it first needs them, for example the OpenTelemetry API and SDK in Step 4. The OTLP exporter arrives in Step 4, and FastAPI with uvicorn in Step 8. The core library never imports the API or UI. Commit `uv.lock`.
+- Step 1 adds only what Step 1 uses: `gurobipy~=14.0`, plus `pytest`, `ruff` and `mypy` as dev dependencies. The ruff rule set and mypy's strict mode are configured in `pyproject.toml`. Each later step adds its own dependencies when it first needs them, for example the OpenTelemetry API and SDK in Step 4. The OTLP exporter arrives in Step 4, and FastAPI with uvicorn in Step 8. The core library never imports the API or UI. Commit `uv.lock`.
 - In `pyproject.toml`, `authors` lists the owner's name only. `uv init` copies the email address from git config, so remove it before committing; the repo is public.
 - A `.gitignore` covering the virtual environment, caches, Gurobi `*.log` and `*.ilp` files, and `gurobi.lic`. An MIT `LICENSE`: `Copyright (c) 2026` followed by the owner's name as it appears in `git config user.name`.
 - Tests live in `tests/`. A first smoke test solves a trivial model with gurobipy and checks that it reports optimal, which proves the free licence is active.
@@ -43,6 +43,7 @@ The licence limits are already verified (D1): 2,000 variables and 2,000 linear c
 - One frozen result type, shared by both models: status (optimal, limit reached, infeasible, interrupted), objective, bound, gap, the solution, and the IIS when infeasible.
 - An independent feasibility checker in repo code, which doesn't trust the solver (lens 1).
 - A CLI, `ground-ops solve`, that runs a seeded instance and prints the result. Experiments and the log walkthrough use it.
+- Add `pytest-cov` and branch-coverage reporting (`--cov=ground_ops --cov-branch --cov-report=term-missing`) now that there's code to cover.
 
 **Done when:** golden tests pass that assert exact objectives on small fixed instances, plus feasibility (every task covered, no overlaps), never a specific assignment (D10). Every instance fits the free limit.
 
@@ -96,11 +97,12 @@ The required tests are the "Done when" items of Steps 2 to 6: golden objectives,
 - One Gurobi environment per run, created and freed under one lock (D17). Cancel calls `terminate()`, and the result reports `interrupted` with the best solution so far.
 - A missing run returns 404 before any stream starts. A reconnecting client resumes from `Last-Event-ID`.
 
-**Done when:** `TestClient` tests cover every endpoint, including reading the SSE stream until `done`, cancelling, and a 404 for a missing run.
+**Done when:** `TestClient` tests cover every endpoint, including reading the SSE stream until `done`, cancelling, and a 404 for a missing run. A boundary test imports the core modules and asserts that FastAPI wasn't loaded, so the core can't start depending on the API unnoticed.
 
 ## Step 9: UI
 
 - `ui/`: React, Vite and TypeScript (D19), with types generated from the OpenAPI schema (D20).
+- Quality checks (D22): `"strict": true` in `tsconfig.app.json` (the template doesn't set it), oxlint, Prettier and Vitest, run together by `npm run check`. First compare oxlint with ESLint and typescript-eslint on planted issues, as D22 asks.
 - Three pages: New run; Run view (live gap, incumbent and bound from SSE, Cancel, a link to Grafana); Result (a Gantt chart for Model 1, demand against staffing for Model 2, the IIS highlighted when infeasible).
 - `ground-ops serve` starts the API and serves the built UI from `ui/dist` (D20). If the build is missing, it serves the API only and says so. The Vite dev server proxies `/api` while developing.
 - The Grafana link opens the provisioned dashboard filtered to the run's `run_id` and its time window.

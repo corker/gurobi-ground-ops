@@ -2,7 +2,7 @@
 
 I'm a backend/platform engineer picking up Gurobi — I'm not an optimisation modeller. The models here are small and textbook, chosen because airport ground operations has the clearest real-world assignment and covering problems. The part I care about is what surrounds the solve: telemetry, deterministic tests, time limits, warm starts, infeasibility diagnosis.
 
-> **Status: planning, before Step 1.** Nothing below is built yet. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
+> **Status: Step 1 of 9 done** (project setup and a licence smoke test). Nothing else below is built yet. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
 
 ## What it does (planned)
 
@@ -56,6 +56,17 @@ The difference between them is the **gap**. When the gap closes, the solver has 
 
 The core library never imports the API or UI. `uv run pytest` needs no Docker, no Node and no browser; the UI has its own tests in `ui/`.
 
+## How to run
+
+You need [uv](https://docs.astral.sh/uv/). It installs the right Python (3.12) and all dependencies itself. No Gurobi licence file is needed: the `gurobipy` package brings its own free licence.
+
+```sh
+uv sync
+uv run pytest
+```
+
+Today that runs one smoke test, which solves a tiny model to prove the free licence works. This section grows as each plan step lands.
+
 ## The free Gurobi licence
 
 The `gurobipy` package from PyPI includes a size-limited licence: **2,000 variables and 2,000 linear constraints** (200 variables if there are quadratic terms), "for research, development, and evaluation purposes only" ([Gurobi: size limits](https://support.gurobi.com/hc/en-us/articles/360051597492), [Gurobi: restricted licence](https://support.gurobi.com/hc/en-us/articles/29682074018833)). Every instance in this repo will fit within it, so nothing will need a paid or academic licence.
@@ -101,4 +112,4 @@ Working on the repo? Start with [AGENTS.md](AGENTS.md) for the rules, then [docs
 
 ## Licence (MIT)
 
-MIT. The licence file arrives with the project setup in Step 1.
+MIT. See [LICENSE](LICENSE).

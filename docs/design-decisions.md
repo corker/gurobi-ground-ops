@@ -2,7 +2,7 @@
 
 Each topic below lists the alternatives, compares them, recommends one, and rates the confidence in that recommendation. Where confidence isn't high, it says what would raise it.
 
-**Contributors:** you don't need to read this file end to end. [plan.md](plan.md) cites a decision number (D1 to D21) wherever one applies; read those sections only.
+**Contributors:** you don't need to read this file end to end. [plan.md](plan.md) cites a decision number (D1 to D22) wherever one applies; read those sections only.
 
 All measurements come from throwaway proof-of-concept scripts run on 2026-11-20. Those scripts aren't in the repo. The key numbers will be re-measured by reproducible scripts in `experiments/`, as listed in [plan.md](plan.md). Settings: Apple M4 Pro, macOS (Darwin 25.6), Python 3.12.12, gurobipy 14.0.0, ortools 9.15.6755, highspy 1.16.0, PuLP 4.3.1, opentelemetry-sdk 1.45.2, `Threads=1` unless stated. Every timing is from one machine, so it shows relative differences only. Work units are Gurobi's deterministic effort measure, so they compare cleanly across runs; wall-clock seconds don't.
 
@@ -33,6 +33,7 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 | 19 | Observability, API and UI | UI library | React with Vite and TypeScript | Medium (75%) |
 | 20 | Observability, API and UI | UI serving and API types | Vite dev proxy while developing; FastAPI serves the built UI; types generated with openapi-typescript | Medium (80%) |
 | 21 | Observability, API and UI | Run identity in telemetry | A `run_id` unique across processes, as a metric attribute on observable gauges for active runs only, with a raised cap | High (85%) |
+| 22 | Observability, API and UI | TypeScript quality checks | `tsc` with `strict: true`, oxlint, Prettier, Vitest; one `npm run check` | Medium (70%) |
 
 ## 1. gurobipy version and licence
 
@@ -358,6 +359,21 @@ Even with an observable gauge, the default cap still overflowed after 2,000 runs
 **Recommendation.** Option 3. The run ID is the process start time plus a counter (for example `1795203617-3`), so it stays unique when each CLI run is its own process. A plain counter would restart at 1 in every process and put every CLI run on the same series. Grafana filters on `run_id`. Lens 12 states the rule: one ID per run, unique across processes, on active-only instruments, with an explicit cap.
 
 **Confidence: High (85%).** Measured. The open question is Prometheus with many short-lived series over long periods, which doesn't affect a local tool.
+
+## 22. TypeScript quality checks
+
+The UI needs the same kind of enforced check as the Python side (`ruff`, `mypy --strict`, `pytest`). Measured on the throwaway React app from D19: the Vite `react-ts` template's `tsconfig.app.json` sets `noUnusedLocals`, `noUnusedParameters` and `noFallthroughCasesInSwitch`, but **not** `strict`. With `"strict": true` added, the app still compiled, and `tsc` caught a planted implicit-`any` parameter (`TS7006`) and a type mismatch (`TS2322`). The template ships oxlint with its React and TypeScript plugins; on the planted file oxlint reported nothing, which wasn't investigated. Prettier flagged 7 unformatted files, as expected for code written without a formatter.
+
+| Concern | Options (version, 2026-11-20) | Choice |
+| --- | --- | --- |
+| Type checking | `tsc` | `strict: true` added to the template's settings |
+| Linting | oxlint 1.94.0 (template default); ESLint 10.15.0 with typescript-eslint 8.73.0; Biome 2.6.8 | oxlint |
+| Formatting | Prettier 3.10.1; oxfmt 0.79.0 (pre-1.0); Biome 2.6.8 | Prettier |
+| Tests and coverage | Vitest 5.1.1 with Testing Library; `@vitest/coverage-v8` 5.1.1 | Vitest; coverage as a report, not a gate |
+
+**Recommendation.** One command, `npm run check` (`tsc -b && oxlint && prettier --check . && vitest run`), which must pass before a UI change is done, like the Python check.
+
+**Confidence: Medium (70%).** `tsc` strict mode and Vitest are measured. Two things aren't: why oxlint reported nothing on the planted file, and whether ESLint's type-aware rules (for example, un-awaited promises) catch enough more to be worth a second tool. **To raise it:** at Step 9, plant one issue each tool should catch and compare oxlint with ESLint and typescript-eslint on the real UI code.
 
 ## Know about, don't build
 

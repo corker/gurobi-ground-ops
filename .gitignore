@@ -1,0 +1,16 @@
+# Python and tooling
+.venv/
+__pycache__/
+*.py[oc]
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+
+# Gurobi output and licence files
+*.log
+*.ilp
+gurobi.lic
