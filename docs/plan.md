@@ -89,11 +89,11 @@ The progress recorder takes its final sample from the model after every solve, s
 
 ## Step 7: Tests
 
-The required tests are the "Done when" items of Steps 2 to 6: golden objectives, structural feasibility, the early stop returning feasible-but-not-optimal with a non-zero gap, the warm-start comparison, an IIS naming the right constraints, and a reproducibility check.
+The required tests are the "Done when" items of Steps 2 to 6: golden objectives, structural feasibility, the early stop returning feasible-but-not-optimal with a non-zero gap, a warm start that is used and reaches the cold optimum (the comparison itself is `experiments/warm_start.py`), an IIS naming the right constraints, and a reproducibility check.
 
 **Done when:** `uv run pytest` passes all of them on the free licence, with no collector running.
 
-Checked by planting one bug at a time in the code each required test guards, such as reporting a stopped solve as optimal, skipping the warm start, listing every constraint as the IIS, or randomising `Seed`. Every planted bug made a test fail, except `cover >= 1` in place of `== 1`: with overtime costs that are never negative, the optimum never gains from a second handler on a task, and `Result.solution` maps each task to one handler, so nothing observable changes.
+Checked by planting one bug at a time in the code each required test guards, such as reporting a stopped solve as optimal, skipping the warm start, listing every constraint as the IIS, or randomising `Seed`. Every planted bug made a test fail, except `cover >= 1` in place of `== 1`: with overtime costs that are never negative, an optimal solution never gains from a second handler on a task, and `Result.solution` maps each task to one handler, so an optimal result can't show the difference. A limit-reached incumbent could in principle carry a second handler with overtime, which isn't ruled out.
 
 ## Step 8: API with live progress
 
