@@ -18,7 +18,7 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 - `uv` for dependencies and for running everything. Never `pip install`.
 - Python 3.12+. Type hints on all function signatures.
 - Flat package layout. No sub-packages unless a file exceeds ~500 lines. Reproducible experiment scripts live in a top-level `experiments/` directory, outside the package.
-- Project docs live in `docs/`: `related-work.md` for existing projects and literature, `quality-lenses.md` for the checks every feature must pass, `design-decisions.md` for decisions with their evidence and confidence, plus design docs and implementation plans as they're written.
+- Project docs live in `docs/`: `related-work.md` for existing projects and literature, `quality-lenses.md` for the checks every feature must pass, `plan.md` for what to build and when each step is done, `design-decisions.md` for decisions with their evidence and confidence, plus design docs as they're written.
 - MIT licence.
 
 ## How to write code
@@ -70,9 +70,9 @@ If you think something will be needed later, say so in your reply. Don't build i
 
 - Every behaviour has a test, including the error and edge paths.
 - Assert on behaviour, not structure: what the solution does (every task covered exactly once, no handler with overlapping tasks, objective equal to the golden value), not the model's internals (number of variables, constraint names). The exception is when the internals are the behaviour, such as the constraint names in an IIS.
-- Test names describe behaviour: `test_time_limit_returns_feasible_with_nonzero_gap`, not `test_solve_2`.
+- Test names describe behaviour: `test_effort_limit_returns_feasible_with_nonzero_gap`, not `test_solve_2`.
 - Test at the right level: a pure function gets a unit test, and a solve gets an integration test. Don't solve a MIP to test a formatting function.
-- Tests are deterministic: fixed seeds for instance generation, pinned solver `Seed` and `Threads`, no wall-clock assertions, no dependence on test order or network. A test that needs a solve stopped early uses `WorkLimit`, not `TimeLimit`; Gurobi documents wall-clock limits as non-deterministic. Leave `ConcurrentMIP` off (the default), keep `Method` at 0, 1, 2 or 4, and build the model in a fixed order. ([Gurobi: Is Gurobi deterministic?](https://support.gurobi.com/hc/en-us/articles/360031636051))
+- Tests are deterministic: fixed seeds for instance generation, pinned solver `Seed` and `Threads`, no wall-clock assertions, no dependence on test order or network. A test that needs a solve stopped early uses an effort limit (`WorkLimit` on Gurobi, `mip_max_nodes` on HiGHS), not `TimeLimit`; Gurobi documents wall-clock limits as non-deterministic. Leave `ConcurrentMIP` off (the default), keep `Method` at 0, 1, 2 or 4, and build the model in a fixed order. ([Gurobi: Is Gurobi deterministic?](https://support.gurobi.com/hc/en-us/articles/360031636051))
 - Use `pytest.mark.parametrize` for repetitive cases instead of copy-pasted tests.
 
 ### Comments
@@ -98,7 +98,7 @@ Build one module at a time:
 1. Write the simplest version that meets the requirement.
 2. Lint and format: `uv run ruff check --fix . && uv run ruff format .`
 3. Test: `uv run pytest`.
-4. Run the changed code directly (`uv run python -c "..."` or a throwaway script), covering the normal case and the edges: an empty instance, one handler with one task, zero demand, an infeasible instance, a time limit too short to prove optimality. Look for what the tests miss: a wrong branch, an off-by-one at a time-slot boundary, a silent `None` or NaN, a raw solver exception leaking out. If code can't be exercised without heavy setup, say so instead of guessing.
+4. Run the changed code directly (`uv run python -c "..."` or a throwaway script), covering the normal case and the edges: an empty instance, one handler with one task, zero demand, an infeasible instance, an effort limit too small to prove optimality. Look for what the tests miss: a wrong branch, an off-by-one at a time-slot boundary, a silent `None` or NaN, a raw solver exception leaking out. If code can't be exercised without heavy setup, say so instead of guessing.
 5. Check the feature against the lenses in `docs/quality-lenses.md` that apply to it.
 6. Reread the diff and remove anything the task didn't require.
 

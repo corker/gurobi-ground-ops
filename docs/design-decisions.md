@@ -2,7 +2,7 @@
 
 Each topic below lists the alternatives, compares them, recommends one, and rates the confidence in that recommendation. Where confidence isn't high, it says what would raise it.
 
-All measurements come from throwaway proof-of-concept scripts run on 2026-11-20. Settings: Apple M4 Pro, macOS (Darwin 25.6), Python 3.12.12, gurobipy 14.0.0, ortools 9.15.6755, highspy 1.16.0, PuLP 4.3.1, opentelemetry-sdk 1.45.2, `Threads=1` unless stated. Every timing is from one machine, so it shows relative differences only. Work units are Gurobi's deterministic effort measure, so they compare cleanly across runs; wall-clock seconds don't.
+All measurements come from throwaway proof-of-concept scripts run on 2026-11-20. Those scripts aren't in the repo. The key numbers will be re-measured by reproducible scripts in `experiments/`, as listed in [plan.md](plan.md). Settings: Apple M4 Pro, macOS (Darwin 25.6), Python 3.12.12, gurobipy 14.0.0, ortools 9.15.6755, highspy 1.16.0, PuLP 4.3.1, opentelemetry-sdk 1.45.2, `Threads=1` unless stated. Every timing is from one machine, so it shows relative differences only. Work units are Gurobi's deterministic effort measure, so they compare cleanly across runs; wall-clock seconds don't.
 
 **Confidence levels.** **High** (85% or more) means measured here, or confirmed by primary docs, with nothing contradicting it. **Medium** (60–85%) means one instance family, a secondary source, or a judgement call. **Low** (below 60%) means a plausible guess.
 
@@ -16,7 +16,7 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 | 4 | Making the search visible | Document that instances solve at the root; demos and early-stop tests use `Presolve=0, Cuts=0` | High (90%) |
 | 5 | Fallback backend | HiGHS via `highspy` (accepted) | High (90%) |
 | 6 | Telemetry metrics and instruments | A core set every backend reports, plus named optional fields; synchronous gauges and counters | High (85%) |
-| 7 | Early-stop test | `WorkLimit`, asserting status `WORK_LIMIT` and a non-zero gap | High (95%) |
+| 7 | Early-stop test | An effort limit (`WorkLimit` on Gurobi), asserting the shared "limit reached, feasible" status and a non-zero gap | High (95%) |
 | 8 | Warm start | `Start` attribute; report work units across seeds; expect a small effect | Medium (80%) |
 | 9 | Infeasibility diagnosis | Gurobi IIS; the fallback reports the capability as unavailable | High (90%) |
 | 10 | Golden tests | Assert the objective and feasibility, never a specific assignment | High (95%) |
@@ -28,7 +28,7 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 
 ## 1. gurobipy version and licence
 
-**Finding.** The pip licence allows 2,000 variables and 2,000 linear constraints, or 200 variables if there are quadratic terms ([Gurobi: model too large](https://support.gurobi.com/hc/en-us/articles/360051597492), updated 2026-03-24). It also expires per major version. Version 13's licence expired on 2026-11-23, version 12's on 2025-11-24 ([Gurobi: licence expired 2026-11-23](https://support.gurobi.com/hc/en-us/articles/19487474933521)). gurobipy 14.0.0 (released 2026-11-10) printed `Restricted license - for non-production use only - expires 2028-11-29` here. Two more things were observed: a model over the limit fails at `optimize()` with `GurobiError: Model too large for size-limited license`, and `NumVars` reads 0 until `update()` is called.
+**Finding.** The pip licence allows 2,000 variables and 2,000 linear constraints, or 200 variables if there are quadratic terms ([Gurobi: model too large](https://support.gurobi.com/hc/en-us/articles/360051597492), updated 2026-03-24). It also expires per major version. Version 13's licence expires on 2026-11-23, version 12's on 2025-11-24 ([Gurobi: licence expired 2026-11-23](https://support.gurobi.com/hc/en-us/articles/19487474933521)). gurobipy 14.0.0 (released 2026-11-10) printed `Restricted license - for non-production use only - expires 2028-11-29` here. Two more things were observed: a model over the limit fails at `optimize()` with `GurobiError: Model too large for size-limited license`, and `NumVars` reads 0 until `update()` is called.
 
 | Option | Pros | Cons |
 | --- | --- | --- |
@@ -248,7 +248,7 @@ The [turnaround dataset](https://github.com/spadrona/airport_ground_handling_dat
 
 ## 15. Where the bound comes from
 
-Measured on Model 1 (T=30): with only the cover constraints, the LP relaxation was integral. Adding the no-overlap constraints gave an LP bound of 15 against an optimum of 55, with 58 fractional variables. Decision 3 shows the clique form closing that gap completely, and decision 4 shows presolve and cuts closing it inside the solver.
+Measured on Model 1 (T=30): with only the cover constraints, the LP relaxation was integral. Adding the no-overlap constraints gave an LP bound of 15 against an optimum of 55, with 58 fractional variables. On decision 3's instances, which differ from this one (a uniform gap rather than travel-dependent gaps), the clique form closed that gap completely. Decision 4 shows presolve and cuts closing it inside the solver.
 
 **Recommendation.** Teach it through the log walkthrough and the experiment journal. No extra code is needed.
 

@@ -61,12 +61,13 @@ The optimods workforce mod is related to Model 2, but it is a different problem:
 
 ## Workforce scheduling and rostering tools
 
-General-purpose solvers ship ready-made examples of both model shapes. CP-SAT (in OR-Tools) and PuLP are the candidates for the open-source fallback backend; the choice comes later.
+General-purpose solvers ship ready-made examples of both model shapes. The open-source fallback backend is HiGHS; [design-decisions.md](design-decisions.md) (D5) compares it with CP-SAT and PuLP.
 
 | Tool | Relevant examples | Version (PyPI) | Licence |
 | --- | --- | --- | --- |
 | [Google OR-Tools](https://github.com/google/or-tools) (14.4k stars) | `shift_scheduling_sat.py`, `tasks_and_workers_assignment_sat.py`, `assignment_with_constraints_sat.py` in [examples/python](https://github.com/google/or-tools/tree/main/examples/python) | 9.15.6755 (2026-01-14) | Apache-2.0 |
 | [CP-SAT Primer](https://github.com/d-krupke/cpsat-primer) (840 stars, pushed 2026-11-07) | A book-length guide to using and understanding CP-SAT, including its log | Docs, not versioned | CC-BY-4.0 |
+| [HiGHS](https://github.com/ERGO-Code/HiGHS) via `highspy` (1.9k stars) | Open-source LP/MIP solver with live MIP callbacks (bound, gap, nodes); the chosen fallback | 1.16.0 (2026-11-11) | MIT |
 | [PuLP](https://github.com/coin-or/pulp) (2.5k stars) | Modelling layer over CBC, HiGHS and other solvers; no airport examples | 4.3.1 (2026-11-19) | Listed as NOASSERTION on GitHub |
 | [Timefold quickstarts](https://github.com/TimefoldAI/timefold-quickstarts) (606 stars, pushed 2026-11-16) | `employee-scheduling`, `task-assigning` and `flight-crew-scheduling` use cases | Python `timefold` 1.24.0b0 (2025-07-08, beta) | Apache-2.0 |
 
@@ -118,8 +119,8 @@ Every neighbour focuses on the model, the data or the log after the fact. This r
 
 - **Check Model 1 against** [Tian et al. 2022](https://doi.org/10.1371/journal.pone.0279131), which is open access and closest in shape.
 - **Check Model 2 against** [Kiermaier, Frey, Bard 2020](https://doi.org/10.1007/s10951-019-00635-5) and the classic set-covering tour formulation it builds on.
-- **Cross-check telemetry with gurobi-logtools:** the final values the callback emits should match what logtools parses from the same run's log. That gives a test that doesn't depend on wall-clock time.
-- **If CP-SAT is chosen as the fallback**, the [CP-SAT Primer](https://github.com/d-krupke/cpsat-primer) explains its log and parameters.
+- **Cross-check telemetry against the solve itself:** the final values the callback emits should equal the model's final attributes. That gives a test that doesn't depend on wall-clock time, without parsing logs.
+- **For comparing solver logs**, the [CP-SAT Primer](https://github.com/d-krupke/cpsat-primer) explains how a non-LP solver reports its bound and progress.
 
 ## Sources
 

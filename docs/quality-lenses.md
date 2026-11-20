@@ -18,7 +18,7 @@ Check each feature through the lenses that apply to it before calling it done. W
 | Gurobi notebooks and optimods | Clear formulations, a gentle progression from simple to complex | Tests, determinism, time-limit and infeasibility handling and telemetry aren't their focus. Optimods hides the model. | Readable formulations, documented step by step |
 | OR-Tools examples, CP-SAT Primer | Breadth of model shapes, explanation of solver logs and parameters | Observability during the solve | Log literacy, backend comparison |
 | Timefold | Fast, practical rosters | No bound or gap, so no proof of optimality | Contrast for the gap-and-bound explainer |
-| gurobi-logtools, CP-SAT-Log-Analyzer | Reading solver progress after the fact | Live metrics, integration with an observability stack | Cross-check live telemetry against the parsed log |
+| gurobi-logtools, CP-SAT-Log-Analyzer | Reading solver progress after the fact | Live metrics, integration with an observability stack | Contrast: live metrics during the solve instead of parsing logs afterwards |
 | Commercial suite (INFORM GroundStar) | Operational fit: real-time re-planning, real labour rules | Everything is closed, so solver behaviour can't be inspected | Motivates warm start as a re-planning edge |
 
 The gap across all of them is the same one: no project treats solve behaviour (status, gap, bound, reproducibility, diagnosis) as something to observe and test.
@@ -52,7 +52,7 @@ Apply the first group to every feature, then the groups that match what the feat
 
 | # | Lens | Questions | Origin |
 | --- | --- | --- | --- |
-| 12 | **Observability** | Do the metrics alone show what the solve did: gap, incumbent, bound, incumbent improvements, nodes, iterations, elapsed time? Are names namespaced and lowercase, with UCUM units (`s`) and low-cardinality attributes? Does the stdout fallback show the same values? Do the final emitted values match the Gurobi log (`LogFile`)? | Repo purpose; [OpenTelemetry conventions](https://opentelemetry.io/docs/specs/semconv/general/metrics/); the gap gurobi-logtools leaves |
+| 12 | **Observability** | Do the metrics alone show what the solve did: gap, incumbent, bound, incumbent improvements, nodes, iterations, elapsed time? Are names namespaced and lowercase, with UCUM units (`s`) and low-cardinality attributes? Does the stdout fallback show the same values? Do the final emitted values equal the model's final attributes? | Repo purpose; [OpenTelemetry conventions](https://opentelemetry.io/docs/specs/semconv/general/metrics/); the gap gurobi-logtools leaves |
 | 13 | **Measurement discipline** | Is any timing comparison, such as warm start versus cold start, repeated across several `Seed` values, with the spread reported? Are the machine, Gurobi version and parameters stated? | [Gurobi on comparisons](https://support.gurobi.com/hc/en-us/articles/26992650628369) |
 | 14 | **Solver independence** | Does the same test suite pass on both backends? Does a backend that lacks a capability, such as IIS, say so in its result instead of faking it? | ISO: flexibility (replaceability) |
 | 15 | **Usability of outputs** | Is the IIS report readable without knowing Gurobi? Is the stdout telemetry readable while the solve runs? Do public functions take and return plain dataclasses? | ISO: interaction capability |
