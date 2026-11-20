@@ -6,7 +6,6 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 
 ## Hard rules
 
-- **Never name any company, product or employer** anywhere in the repo (code, comments, docs, test data, commit messages). The one exception is `docs/related-work.md`, which may name third-party companies, products and projects when citing them as related work. Never name the owner's employer, even there.
 - **Verify every Gurobi API against the official docs before using it, and cite the URL** (in the commit/PR or the docstring, wherever it's useful). Don't plan around method names, `where` constants or `cbGet` keys from memory. A wrong `where`/`what` pair raises at runtime.
 - If something can't be verified, say so. Never present a guess as fact.
 - **No performance claims or benchmark numbers that haven't been measured.** Any timing reported must come from a real run, with the machine and solver settings stated.
@@ -19,7 +18,7 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 - `uv` for dependencies and for running everything. Never `pip install`.
 - Python 3.12+. Type hints on all function signatures.
 - Flat package layout. No sub-packages unless a file exceeds ~500 lines.
-- Project docs live in `docs/`: `related-work.md` for existing projects and literature, plus design docs and implementation plans as they're written.
+- Project docs live in `docs/`: `related-work.md` for existing projects and literature, `quality-lenses.md` for the checks every feature must pass, plus design docs and implementation plans as they're written.
 - MIT licence.
 
 ## How to write code
@@ -57,7 +56,7 @@ If you think something will be needed later, say so in your reply. Don't build i
 
 - **Single responsibility:** each module and function has one reason to change. Instance generation, model building, solving, telemetry and reporting live in separate modules. A model builder doesn't print or emit metrics, and a reporter doesn't solve.
 - **Open/closed** applies only to the solver backend: one thin `Protocol` with exactly two implementations (Gurobi plus one open-source fallback). Swapping backends must not require editing the models. Anywhere else, one implementation means a concrete class, not a `Protocol`, and no extension points.
-- **Substitution:** both backends honour the same contract: the same result type, the same status meanings, and the same behaviour on time limit and infeasibility. A caller never branches on which backend it got.
+- **Substitution:** both backends honour the same contract: the same result type, the same status meanings, and the same behaviour on time limit and infeasibility. A capability only one backend has, such as IIS, is reported as unavailable in the result, so a caller never branches on which backend it got.
 - **Interface segregation:** a `Protocol` contains only the methods its callers actually use.
 - **Dependency inversion:** collaborators such as the backend and the telemetry sink are passed in as arguments, not constructed inside the function that uses them. Prefer composition over inheritance: no base classes, no inheritance hierarchies.
 
@@ -73,7 +72,7 @@ If you think something will be needed later, say so in your reply. Don't build i
 - Assert on behaviour, not structure: what the solution does (every task covered exactly once, no handler with overlapping tasks, objective equal to the golden value), not the model's internals (number of variables, constraint names). The exception is when the internals are the behaviour, such as the constraint names in an IIS.
 - Test names describe behaviour: `test_time_limit_returns_feasible_with_nonzero_gap`, not `test_solve_2`.
 - Test at the right level: a pure function gets a unit test, and a solve gets an integration test. Don't solve a MIP to test a formatting function.
-- Tests are deterministic: fixed seeds for instance generation, pinned solver `Seed` and `Threads`, no wall-clock assertions, no dependence on test order or network.
+- Tests are deterministic: fixed seeds for instance generation, pinned solver `Seed` and `Threads`, no wall-clock assertions, no dependence on test order or network. A test that needs a solve stopped early uses `WorkLimit`, not `TimeLimit`; Gurobi documents wall-clock limits as non-deterministic. Leave `ConcurrentMIP` off (the default), keep `Method` at 0, 1, 2 or 4, and build the model in a fixed order. ([Gurobi: Is Gurobi deterministic?](https://support.gurobi.com/hc/en-us/articles/360031636051))
 - Use `pytest.mark.parametrize` for repetitive cases instead of copy-pasted tests.
 
 ### Comments
@@ -100,7 +99,8 @@ Build one module at a time:
 2. Lint and format: `uv run ruff check --fix . && uv run ruff format .`
 3. Test: `uv run pytest`.
 4. Run the changed code directly (`uv run python -c "..."` or a throwaway script), covering the normal case and the edges: an empty instance, one handler with one task, zero demand, an infeasible instance, a time limit too short to prove optimality. Look for what the tests miss: a wrong branch, an off-by-one at a time-slot boundary, a silent `None` or NaN, a raw solver exception leaking out. If code can't be exercised without heavy setup, say so instead of guessing.
-5. Reread the diff and remove anything the task didn't require.
+5. Check the feature against the lenses in `docs/quality-lenses.md` that apply to it.
+6. Reread the diff and remove anything the task didn't require.
 
 When a verification fails, fix it and re-verify before reporting done.
 
