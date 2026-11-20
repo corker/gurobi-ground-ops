@@ -45,7 +45,7 @@ class ProgressRecorder:
         self, run_id: str, *, start_span: SpanStarter | None = None, on_log_line: LineSink | None = None
     ) -> None:
         self.run_id = run_id
-        self._start_span = start_span
+        self.start_span: SpanStarter = start_span or (lambda _: nullcontext())
         self._on_log_line = on_log_line
         self.latest: Progress | None = None
         self._best: float | None = None
@@ -62,9 +62,6 @@ class ProgressRecorder:
             iterations=int(model.IterCount),
             improvements=self._improvements,
         )
-
-    def phase(self, name: str) -> AbstractContextManager[object]:
-        return self._start_span(name) if self._start_span is not None else nullcontext()
 
     def __call__(self, model: gp.Model, where: int) -> None:
         if where == GRB.Callback.MESSAGE:
@@ -95,4 +92,4 @@ class ProgressRecorder:
 
 def phase(recorder: ProgressRecorder | None, name: str) -> AbstractContextManager[object]:
     """A span for one phase of a solve, or nothing when the solve isn't being recorded."""
-    return recorder.phase(name) if recorder is not None else nullcontext()
+    return recorder.start_span(name) if recorder is not None else nullcontext()
