@@ -30,9 +30,14 @@ def test_hand_made_instance_has_the_hand_computed_optimum() -> None:
     assert assignment_violations(HAND_MADE, result.solution) == []
 
 
-@pytest.mark.parametrize("seed", range(1, 6))
-def test_optimum_matches_brute_force_on_small_instances(seed: int) -> None:
-    instance = generate_assignment(6, seed)
+# Brute force grows as handlers ** tasks, so 8-task cases use only seeds that need at most 4 handlers.
+EIGHT_TASK_SEEDS = [s for s in range(1, 60) if len(generate_assignment(8, s).handlers) <= 4][:5]
+BRUTE_FORCE_CASES = [(6, seed) for seed in range(1, 21)] + [(8, seed) for seed in EIGHT_TASK_SEEDS]
+
+
+@pytest.mark.parametrize(("n_tasks", "seed"), BRUTE_FORCE_CASES)
+def test_optimum_matches_brute_force_on_small_instances(n_tasks: int, seed: int) -> None:
+    instance = generate_assignment(n_tasks, seed)
     result = solve_assignment(instance)
     assert result.status is Status.OPTIMAL
     assert result.objective == brute_force_optimum(instance)

@@ -42,7 +42,7 @@ def test_hand_made_instance_has_the_hand_computed_optimum() -> None:
     assert coverage_shortfalls(HAND_MADE, result.solution) == []
 
 
-@pytest.mark.parametrize("seed", range(1, 6))
+@pytest.mark.parametrize("seed", range(1, 11))
 def test_optimum_matches_brute_force_on_small_instances(seed: int) -> None:
     instance = small_instance(seed)
     result = solve_coverage(instance)
