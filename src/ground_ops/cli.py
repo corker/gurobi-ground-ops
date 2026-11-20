@@ -2,11 +2,15 @@
 
 import argparse
 import sys
+from collections.abc import Callable
+from pathlib import Path
 
 from ground_ops.domain import AssignmentInstance, CoverageInstance, Result, ShiftPattern, covers, overtime
 from ground_ops.instances import generate_assignment, generate_coverage
 from ground_ops.model1 import solve_assignment
 from ground_ops.model2 import solve_coverage
+from ground_ops.progress import ProgressRecorder
+from ground_ops.telemetry import telemetry_from_environment
 
 
 def _clock(minutes: int) -> str:
@@ -64,25 +68,50 @@ def coverage_report(instance: CoverageInstance, seed: int, result: Result) -> st
     return "\n".join(lines)
 
 
+def _with_telemetry(model: str, solve: Callable[[ProgressRecorder | None], Result]) -> Result:
+    telemetry = telemetry_from_environment()
+    if telemetry is None:
+        return solve(None)
+    try:
+        with telemetry.run(model) as recorder:
+            print(f"ground-ops: exporting telemetry for run_id {recorder.run_id}", file=sys.stderr)
+            return solve(recorder)
+    finally:
+        telemetry.shutdown()
+
+
 def main(argv: list[str] | None = None) -> int:
+    solver_options = argparse.ArgumentParser(add_help=False)
+    solver_options.add_argument("--seed", type=int, default=1, help="instance seed (default: 1)")
+    solver_options.add_argument("--log", type=Path, help="append Gurobi's log to this file")
+    solver_options.add_argument(
+        "--expose-search", action="store_true", help="set Presolve=0 and Cuts=0 so the search is visible"
+    )
     parser = argparse.ArgumentParser(prog="ground-ops")
     commands = parser.add_subparsers(dest="command", required=True)
-    solve = commands.add_parser("solve", help="solve a seeded Model 1 instance and print the schedule")
+    solve = commands.add_parser(
+        "solve", parents=[solver_options], help="solve a seeded Model 1 instance and print the schedule"
+    )
     solve.add_argument("--tasks", type=int, default=30, help="number of tasks, even (default: 30)")
-    solve.add_argument("--seed", type=int, default=1, help="instance seed (default: 1)")
-    cover = commands.add_parser("cover", help="solve a seeded Model 2 instance and print the roster")
-    cover.add_argument("--seed", type=int, default=1, help="instance seed (default: 1)")
+    commands.add_parser("cover", parents=[solver_options], help="solve a seeded Model 2 instance and print the roster")
     args = parser.parse_args(argv)
 
-    if args.command == "cover":
-        coverage = generate_coverage(args.seed)
-        print(coverage_report(coverage, args.seed, solve_coverage(coverage)))
-        return 0
     try:
+        if args.command == "cover":
+            coverage = generate_coverage(args.seed)
+
+            def solve_cover(recorder: ProgressRecorder | None) -> Result:
+                return solve_coverage(coverage, recorder=recorder, log_file=args.log, expose_search=args.expose_search)
+
+            print(coverage_report(coverage, args.seed, _with_telemetry("coverage", solve_cover)))
+            return 0
         instance = generate_assignment(args.tasks, args.seed)
-        result = solve_assignment(instance)
+
+        def solve_tasks(recorder: ProgressRecorder | None) -> Result:
+            return solve_assignment(instance, recorder=recorder, log_file=args.log, expose_search=args.expose_search)
+
+        print(report(instance, args.seed, _with_telemetry("assignment", solve_tasks)))
+        return 0
     except ValueError as error:
         print(f"ground-ops: {error}", file=sys.stderr)
         return 2
-    print(report(instance, args.seed, result))
-    return 0

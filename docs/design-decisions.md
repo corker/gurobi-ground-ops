@@ -95,6 +95,8 @@ Measured on seeded instances with a uniform 10-minute gap between tasks:
 
 **Recommendation.** The first option. Say in the README that textbook instances at free-licence sizes are easy for Gurobi 14, and that the curves shown come from switching presolve and cuts off.
 
+**Re-measured in Step 4 with the repo's own generators** (the numbers above came from proof-of-concept variants): across 20 seeds each, all 80 Model 1 instances of 20 to 48 tasks solved at the root, and 18 of 20 Model 2 days did (at most 37 nodes otherwise). With `Presolve=0, Cuts=0`, Model 1 at 48 tasks needed 1 to 170,454 nodes, but Model 2 stayed easy (median 1 node), so the visible-search demos use Model 1. Gurobi 14 still reports a few cuts in the log with `Cuts=0`; the cause is unverified (see [reading-the-log.md](reading-the-log.md)).
+
 **Confidence: High (90%).** A follow-up sweep under default settings ran Model 1 at T=20, 30 and 35 and Model 2 at 32 and 48 slots, with 20 seeds each. All 99 instances within the limit solved at the root node, and one T=35 instance exceeded the limit. The remaining doubt is model variants not yet tried.
 
 ## 5. Second solver backend
@@ -131,9 +133,9 @@ A spike (a throwaway proof of concept) ran Model 1 on Gurobi and HiGHS behind on
 
 Gurobi codes are from the [callback codes reference](https://docs.gurobi.com/projects/optimizer/en/current/reference/numericcodes/callbacks.html). Gurobi notes that `MIPSOL_OBJ` is "not necessarily better than the current incumbent" and that `MIP_SOLCNT` counts solutions presented, not improvements. So the improvement count must be computed by comparing values.
 
-Instruments, measured with `InMemoryMetricReader` on SDK 1.45.2: a synchronous gauge (`create_gauge`) for gap, incumbent, bound, nodes and iterations, and a counter for improvements. Both export correctly. On the callback itself, Model 1 (T=30, seeds 0–2) took identical work and node counts with and without it, and runtime changed by −2% to +4%. The final sample matched `ObjVal`, `ObjBound` and `NodeCount` exactly. Names: OpenTelemetry's registry has no `solver` namespace, and its rules ask for lowercase, dot-separated, namespaced names with UCUM units ([naming](https://opentelemetry.io/docs/specs/semconv/general/naming/)).
+Instruments, measured with `InMemoryMetricReader` on SDK 1.45.2: a synchronous gauge (`create_gauge`) for gap, incumbent, bound, nodes and iterations, and a counter for improvements. Both export correctly. Those two measurements came from the proof of concept. Re-measured in Step 4 on the real callback ([experiments.md](experiments.md)): Model 1 with 40 tasks and the search exposed took identical work units and node counts in every run with and without it, and the median wall-clock difference was smaller than this machine's run-to-run noise. The last callback sample did **not** always match the final attributes, so the recorder takes its final sample from `ObjVal`, `ObjBound`, `NodeCount` and `IterCount` after the solve. Names: OpenTelemetry's registry has no `solver` namespace, and its rules ask for lowercase, dot-separated, namespaced names with UCUM units ([naming](https://opentelemetry.io/docs/specs/semconv/general/naming/)).
 
-**Recommendation.** All seven metrics above. The callback writes the latest values, throttled by elapsed time, and observable gauges report them for active runs only (D21 explains why not synchronous gauges). A project prefix, for example `groundops.solver.gap`, avoids a future clash.
+**Recommendation.** All seven metrics above. The callback records the latest values at every MIP callback, the exporter sends them once a second, and observable gauges report them for active runs only (D21 explains why not synchronous gauges). A project prefix, for example `groundops.solver.gap`, avoids a future clash.
 
 **Confidence: High (85%).** Measured.
 
@@ -355,6 +357,8 @@ Measured with opentelemetry-sdk 1.45.2's in-memory reader, plus one run against 
 | 6 | Progress as structured logs in Loki | Not tested; plotting needs LogQL `unwrap` | Too complex for now |
 
 Even with an observable gauge, the default cap still overflowed after 2,000 runs, because the SDK keeps every attribute set it has seen. That's why option 3 needs the raised cap.
+
+Measured in Step 4 with the real `Telemetry` class: the wildcard view `groundops.solver.*` does lift the cap (2,100 runs in one process, no overflow). The cost of keeping every attribute set is that each run's final flush walks all of them. Median flush time over 50 runs, Apple M4 Pro, two separate runs ([experiments.md](experiments.md)): 0.1 to 0.2 ms around run 100, 2.5 to 6.1 ms around run 2,000, and 13 to 16 ms around run 4,000. That's fine for a local tool, but a process serving many thousands of runs would want to be restarted.
 
 **Recommendation.** Option 3. The run ID is the process start time plus a counter (for example `1795203617-3`), so it stays unique when each CLI run is its own process. A plain counter would restart at 1 in every process and put every CLI run on the same series. Grafana filters on `run_id`. Lens 12 states the rule: one ID per run, unique across processes, on active-only instruments, with an explicit cap.
 

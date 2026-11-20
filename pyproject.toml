@@ -10,6 +10,9 @@ license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "gurobipy~=14.0",
+    "opentelemetry-api~=1.45",
+    "opentelemetry-exporter-otlp-proto-http~=1.45",
+    "opentelemetry-sdk~=1.45",
 ]
 
 [project.scripts]
@@ -37,10 +40,11 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "N", "ANN", "C90", "PT", 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["PLR2004"]
 "src/ground_ops/cli.py" = ["T20"]
+"experiments/**" = ["T20"]
 
 [tool.mypy]
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "experiments"]
 
 [tool.pytest.ini_options]
 addopts = "--cov=ground_ops --cov-branch --cov-report=term-missing"

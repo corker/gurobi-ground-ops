@@ -1,11 +1,13 @@
 """Model 1: assign handlers to tasks, minimising overtime. The formulation is in the README's Models section."""
 
 from itertools import combinations
+from pathlib import Path
 
 import gurobipy as gp
 from gurobipy import GRB
 
 from ground_ops.domain import AssignmentInstance, Result, Status, conflict, overtime
+from ground_ops.progress import ProgressRecorder
 from ground_ops.solver import check_size, gurobi_env
 
 
@@ -28,14 +30,22 @@ def build_model(instance: AssignmentInstance, env: gp.Env) -> tuple[gp.Model, gp
     return model, x
 
 
-def solve_assignment(instance: AssignmentInstance) -> Result:
+def solve_assignment(
+    instance: AssignmentInstance,
+    *,
+    recorder: ProgressRecorder | None = None,
+    log_file: Path | None = None,
+    expose_search: bool = False,
+) -> Result:
     if not instance.tasks:
         raise ValueError("an instance needs at least one task")
-    with gurobi_env() as env:
+    with gurobi_env(log_file=log_file, expose_search=expose_search) as env:
         model, x = build_model(instance, env)
         with model:
             check_size(model)
-            model.optimize()
+            model.optimize(recorder)
+            if recorder is not None and model.Status == GRB.OPTIMAL:
+                recorder.finish(model)
             return _result(model, x)
 
 

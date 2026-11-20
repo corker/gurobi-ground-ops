@@ -2,7 +2,7 @@
 
 I'm a backend/platform engineer picking up Gurobi — I'm not an optimisation modeller. The models here are small and textbook, chosen because airport ground operations has the clearest real-world assignment and covering problems. The part I care about is what surrounds the solve: telemetry, deterministic tests, time limits, warm starts, infeasibility diagnosis.
 
-> **Status: Steps 1 to 3 of 9 done:** project setup, and both models with their CLI commands. Everything else below is planned. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
+> **Status: Steps 1 to 4 of 9 done:** project setup, both models with their CLI commands, and solver telemetry. Everything else below is planned. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
 
 ## What it does (planned)
 
@@ -86,6 +86,8 @@ H5 shift 07:00-13:00: T8 07:35-07:45, T5 11:08-11:27
 
 Up to 48 tasks fit the free licence for every seed tried (20 seeds per size); from 50 on, some seeds don't, and the command says so instead of solving.
 
+Both commands take `--log FILE` to write Gurobi's log, and `--expose-search` to set `Presolve=0` and `Cuts=0` so the branch-and-bound search becomes visible.
+
 Roster a seeded Model 2 day (48 half-hour slots, 111 shift patterns) and print demand against people on duty:
 
 ```sh
@@ -102,6 +104,29 @@ roster:
 slot   demand  on duty
 ...
 ```
+
+### Telemetry
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` to an OpenTelemetry collector's OTLP/HTTP address and every solve exports its progress once a second while it runs (`OTEL_METRIC_EXPORT_INTERVAL` overrides that); leave it unset and nothing is exported. The command prints the run's `run_id` to stderr.
+
+```sh
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 uv run ground-ops solve --tasks 40 --expose-search
+```
+
+| Metric (OpenTelemetry name) | Unit | From |
+| --- | --- | --- |
+| `groundops.solver.gap` | ratio | incumbent and bound |
+| `groundops.solver.incumbent` | objective | best solution so far |
+| `groundops.solver.bound` | objective | best proven bound |
+| `groundops.solver.incumbent_improvements` | solutions | count of better solutions found |
+| `groundops.solver.nodes` | nodes | branch-and-bound nodes explored |
+| `groundops.solver.simplex_iterations` | iterations | simplex iterations so far |
+| `groundops.solver.elapsed` | seconds | wall-clock time |
+| `groundops.solver.work` | work units | Gurobi's deterministic effort measure |
+
+Each point carries `run_id` and `model` (`assignment` or `coverage`) attributes. Prometheus renames them on ingestion: dots become underscores and the unit becomes a suffix, so `groundops.solver.gap` is queried as `groundops_solver_gap_ratio`. A run's last values come from the model's final attributes rather than the last callback, which can fire before the final bound is known.
+
+If the endpoint is set but nothing is listening, the run still completes, but the final export retries for several seconds before giving up; `OTEL_EXPORTER_OTLP_TIMEOUT` shortens that.
 
 This section grows as each plan step lands.
 
@@ -177,7 +202,9 @@ A stuck solve means different things depending on which number is stuck:
 | **Bound won't move** | The solver can't prove the current answer is good | The formulation: a weak LP relaxation, symmetry. Usually a modelling question. |
 | Both stuck, gap large | Both of the above | Try a smaller instance first |
 
-One measured run shows the pattern. Model 1 with 30 tasks, presolve and cuts switched off so the search is visible, one thread, on an Apple M4 Pro: by 0.2 seconds the incumbent had fallen from 405 to 55, which turned out to be optimal, and the bound had risen from 0 to 35. Closing the rest of the gap, raising the bound from 35 to 55, took another 3.5 seconds. **The answer was found almost at once. Nearly all the time went into proving it.** With default settings, Gurobi 14 solved all 99 instances that fit the free limit at the root node, in milliseconds (Model 1 with 20, 30 or 35 tasks and Model 2 with 32 or 48 slots, 20 seeds each). That's why the visible-search demos switch presolve and cuts off ([design decision 4](docs/design-decisions.md#4-making-the-search-visible)).
+One measured run shows the pattern; [docs/reading-the-log.md](docs/reading-the-log.md) walks through its full log. Model 1 with 40 tasks, seed 1 and `--expose-search`, one thread, on an Apple M4 Pro: a heuristic found the optimal schedule (30 minutes of overtime) at the root, in a fraction of a second. The bound then climbed from 0 to 23, 26, 27 and finally 30 over 32,424 nodes and 3.17 work units. **The answer was found almost at once. Nearly all the work went into proving it.**
+
+With default settings the search is usually invisible. Across 20 seeds each, all 80 Model 1 instances (20, 30, 40 and 48 tasks) solved at the root node, and so did 18 of 20 Model 2 days; the other two needed at most 37 nodes. Presolve does most of the work: on the 40-task instance it removes 539 of 593 constraints, and the LP relaxation of what's left already gives the optimum. That's why the visible-search demos use `--expose-search`, which sets `Presolve=0` and `Cuts=0` ([design decision 4](docs/design-decisions.md#4-making-the-search-visible)). With it, Model 1 needs anywhere from 1 to 170,454 nodes at 48 tasks, while Model 2 stays easy (a median of 1 node).
 
 ## What it deliberately doesn't do
 
@@ -192,8 +219,10 @@ One measured run shows the pattern. Model 1 with 30 tasks, presolve and cuts swi
 
 Working on the repo? Start with [AGENTS.md](AGENTS.md) for the rules, then [docs/plan.md](docs/plan.md) for what to build.
 
-
 - [Plan](docs/plan.md): what gets built, step by step.
+- [Domain](docs/domain.md): the glossary, where the numbers come from, and what's simplified.
+- [Reading a Gurobi log](docs/reading-the-log.md): two real logs from this repo, annotated line by line.
+- [Experiments](docs/experiments.md): the measurements behind the numbers quoted here, with their scripts and machine.
 - [Design decisions](docs/design-decisions.md): each choice, with alternatives, measurements and confidence.
 - [Quality lenses](docs/quality-lenses.md): the checks every feature must pass.
 - [Related work](docs/related-work.md): existing projects and papers, and where this repo differs.

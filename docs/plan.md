@@ -13,7 +13,7 @@ What to build, in order, and when each step counts as done. The rules for *how* 
 | 1 | Project setup: package and a smoke test that proves the free licence works | Done |
 | 2 | Model 1, task assignment, with golden tests and the CLI | Done |
 | 3 | Model 2, shift coverage | Done |
-| 4 | Solver telemetry (the most important step) | Not started |
+| 4 | Solver telemetry (the most important step) | Done |
 | 5 | Observability stack: LGTM in Docker Compose, dashboard, traces, logs | Not started |
 | 6 | Operational edges: early stop, warm start, IIS, determinism | Not started |
 | 7 | Required test set | Not started |
@@ -80,6 +80,8 @@ Start only after Model 1 is done and tested.
 - **Warm start:** re-solve a perturbed instance (one task moves) using the previous solution as a `Start`. Report the difference in work units (Gurobi's deterministic measure of solver effort, used instead of seconds) against a cold start across seeds, honestly, even if it's "no measurable gain" (D8).
 - **Infeasibility diagnosis:** compute an IIS on an infeasible instance and report the conflicting constraints readably (D9). The CLI must report infeasible results too; today `report` formats only optimal ones.
 - **Determinism:** pin `Seed` and `Threads`. Document that Gurobi's results depend on the thread count, and which settings make a run reproducible (D7).
+
+The progress recorder takes its final sample from the model only on an optimal result. When the early stop adds "limit reached", it must finish on that status too, or the last exported values will be stale.
 
 **Done when:** each of the four edges has a test: the early stop returns "limit reached, feasible" with a non-zero gap; the warm-start comparison runs and reports its numbers; the IIS names the conflicting constraints; two runs with the same `Seed` and `Threads` give the same node count.
 

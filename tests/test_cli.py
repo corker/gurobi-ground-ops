@@ -1,7 +1,11 @@
+from pathlib import Path
+
 import pytest
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
 from ground_ops.cli import coverage_report, main, report
 from ground_ops.domain import AssignmentInstance, CoverageInstance, Handler, Result, ShiftPattern, Status, Task
+from ground_ops.telemetry import Telemetry
 
 INSTANCE = AssignmentInstance(
     tasks=(Task(0, 600, 615), Task(1, 420, 440), Task(2, 300, 320)),
@@ -54,3 +58,29 @@ def test_coverage_report_shows_the_roster_and_demand_against_on_duty() -> None:
 def test_cover_command_prints_a_roster_and_exits_cleanly(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["cover", "--seed", "1"]) == 0
     assert "status: optimal" in capsys.readouterr().out
+
+
+def test_solve_exports_telemetry_and_names_the_run_when_a_collector_is_configured(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    reader = InMemoryMetricReader()
+    monkeypatch.setattr("ground_ops.cli.telemetry_from_environment", lambda: Telemetry(reader))
+    assert main(["solve", "--tasks", "10", "--seed", "3"]) == 0
+    assert "exporting telemetry for run_id" in capsys.readouterr().err
+    data = reader.get_metrics_data()
+    assert data is not None
+    assert {m.name for m in data.resource_metrics[0].scope_metrics[0].metrics} >= {"groundops.solver.gap"}
+
+
+def test_log_and_expose_search_options_write_a_log_with_a_search_tree(tmp_path: Path) -> None:
+    log = tmp_path / "solve.log"
+    assert main(["solve", "--tasks", "30", "--seed", "1", "--expose-search", "--log", str(log)]) == 0
+    assert "Expl Unexpl" in log.read_text()
+
+
+@pytest.mark.parametrize("command", ["solve", "cover"])
+def test_a_log_in_a_missing_directory_is_refused_before_solving(
+    command: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main([command, "--log", "/nonexistent/dir/x.log"]) == 2
+    assert capsys.readouterr().err == "ground-ops: can't write the log: /nonexistent/dir isn't a directory\n"

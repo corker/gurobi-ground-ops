@@ -3,10 +3,13 @@
 The formulation is in the README's Models section.
 """
 
+from pathlib import Path
+
 import gurobipy as gp
 from gurobipy import GRB
 
 from ground_ops.domain import CoverageInstance, Result, Status, covers, paid_slots
+from ground_ops.progress import ProgressRecorder
 from ground_ops.solver import check_size, gurobi_env
 
 
@@ -23,14 +26,22 @@ def build_model(instance: CoverageInstance, env: gp.Env) -> tuple[gp.Model, gp.t
     return model, y
 
 
-def solve_coverage(instance: CoverageInstance) -> Result:
+def solve_coverage(
+    instance: CoverageInstance,
+    *,
+    recorder: ProgressRecorder | None = None,
+    log_file: Path | None = None,
+    expose_search: bool = False,
+) -> Result:
     if not instance.demand:
         raise ValueError("an instance needs at least one demand slot")
-    with gurobi_env() as env:
+    with gurobi_env(log_file=log_file, expose_search=expose_search) as env:
         model, y = build_model(instance, env)
         with model:
             check_size(model)
-            model.optimize()
+            model.optimize(recorder)
+            if recorder is not None and model.Status == GRB.OPTIMAL:
+                recorder.finish(model)
             return _result(model, y)
 
 
