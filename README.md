@@ -2,7 +2,7 @@
 
 I'm a backend/platform engineer picking up Gurobi — I'm not an optimisation modeller. The models here are small and textbook, chosen because airport ground operations has the clearest real-world assignment and covering problems. The part I care about is what surrounds the solve: telemetry, deterministic tests, time limits, warm starts, infeasibility diagnosis.
 
-> **Status: Steps 1 to 5 of 9 done:** project setup, both models with their CLI commands, solver telemetry, and the observability stack. Everything else below is planned. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
+> **Status: Steps 1 to 6 of 9 done:** project setup, both models with their CLI commands, solver telemetry, the observability stack, and the operational edges (early stop, warm start, infeasibility diagnosis, reproducibility). Everything else below is planned. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
 
 ## What it does (planned)
 
@@ -22,7 +22,7 @@ The difference between them is the **gap**. When the gap closes, the solver has 
 ## Terms used below
 
 - **Warm start:** starting the solver from a known solution, such as the previous schedule, instead of from nothing.
-- **IIS** (irreducible inconsistent subsystem): a smallest set of constraints that can't all hold at once. Remove any one of them and the rest can be satisfied, so it pinpoints why a problem is infeasible.
+- **IIS** (irreducible inconsistent subsystem): a set of constraints that can't all hold at once, where removing any one of them lets the rest hold. It pinpoints why a problem is infeasible. It's irreducible, not necessarily the smallest such set.
 - **LP relaxation:** the same problem with the whole-number requirements dropped (allowing, say, half a person on a task). It's fast to solve, and its answer is where the bound comes from.
 - **Presolve:** simplifications the solver makes before it starts searching.
 - **Cuts:** extra constraints the solver adds to tighten the LP relaxation, which raises the bound.
@@ -146,6 +146,46 @@ If the endpoint is set but nothing is listening, the run still completes, but th
 ```sh
 uv run pytest -m integration
 ```
+
+### Stopping early, warm starts, infeasibility, reproducibility
+
+**Stopping early.** `--work-limit N` stops the solve after N work units and reports the best schedule so far with its bound and gap. "Limit reached" is a normal result, not an error. Work units are used instead of seconds because Gurobi documents work limits as deterministic and time limits as not:
+
+```sh
+uv run ground-ops solve --tasks 40 --seed 1 --expose-search --work-limit 0.5
+```
+
+```
+Model 1: 40 tasks, 7 handlers, seed 1
+status: limit reached  overtime: 30 min  bound: 17 min  gap: 43.33%
+H0 shift 09:30-17:30: T13 10:19-10:34, T38 11:10-11:23, ...
+```
+
+The schedule is already the optimal one (30 minutes, as the full solve proves), but at this point the solver can only prove that nothing beats 17. With `--work-limit 0` the solve stops before the root relaxation, so there's a first schedule but no bound yet, and the gap is reported as undefined.
+
+**Infeasibility.** `--handlers N` overrides the number of handlers, which defaults to one more than the most tasks that overlap at any moment. With fewer than that, no schedule exists, and the command prints an IIS instead:
+
+```sh
+uv run ground-ops solve --tasks 10 --seed 1 --handlers 2
+```
+
+```
+Model 1: 10 tasks, 2 handlers, seed 1
+status: infeasible
+these constraints can't all hold, though any one fewer can (there may be other conflicts too):
+  cover[0]
+  cover[1]
+  cover[3]
+  no_overlap[h0,t0,t1]
+  ...
+(cover[t]: task t needs one handler; no_overlap[hH,tA,tB]: handler H can't do both A and B)
+```
+
+Read: tasks 0, 1 and 3 overlap pairwise, and two handlers can't cover three overlapping tasks.
+
+**Warm starts.** `solve_assignment(..., start=previous.solution)` passes a previous schedule to Gurobi as a MIP start (it isn't a CLI option). Measured over 20 seeds with one task delayed by 25 minutes, it brought **no consistent gain**: a median of 0.146 work units against 0.137 cold, less work on only 7 of 20 seeds, and on one seed 45.6 work units against 3.7. The start changes the search path, and on these instances nearly all the work is proving the bound, which a good first schedule doesn't help with. Details in [docs/experiments.md](docs/experiments.md#warm-start-against-cold-start-d8).
+
+**Reproducibility.** Every solve pins `Threads=1` and `Seed=0`. Gurobi says it returns the same results for the same model and parameters on the same computer with the same Gurobi version ([Gurobi: determinism](https://support.gurobi.com/hc/en-us/articles/360031636051)); it doesn't promise the same search on another machine. A test solves the same instance twice and checks the node count, iterations and work units are identical. The thread count is a parameter like any other: measured on five seeds, four threads explored a different number of nodes from one thread on four of them, reached the same optimum, and repeated exactly when run again ([docs/experiments.md](docs/experiments.md#one-thread-against-four-d7)).
 
 This section grows as each plan step lands.
 

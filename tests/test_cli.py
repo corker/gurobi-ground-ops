@@ -90,3 +90,63 @@ def test_the_cli_traces_instance_generation_too(monkeypatch: pytest.MonkeyPatch,
     assert main(["cover", "--seed", "2"]) == 0
     names = {span.name for span in in_memory.spans.get_finished_spans()}
     assert names == {"ground-ops run", "generate instance", "build model", "solve"}
+
+
+def test_report_of_an_infeasible_result_lists_the_conflicting_constraints() -> None:
+    infeasible = Result(Status.INFEASIBLE, None, None, None, {}, iis=("cover[0]", "no_overlap[h0,t0,t1]"))
+    assert report(INSTANCE, seed=4, result=infeasible).splitlines() == [
+        "Model 1: 3 tasks, 2 handlers, seed 4",
+        "status: infeasible",
+        "these constraints can't all hold, though any one fewer can (there may be other conflicts too):",
+        "  cover[0]",
+        "  no_overlap[h0,t0,t1]",
+        "(cover[t]: task t needs one handler; no_overlap[hH,tA,tB]: handler H can't do both A and B)",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("result", "expected"),
+    [
+        (
+            Result(Status.LIMIT_REACHED, objective=None, bound=None, gap=None, solution={}),
+            "status: limit reached  no solution found  bound: none yet",
+        ),
+        (
+            Result(Status.LIMIT_REACHED, objective=60.0, bound=None, gap=None, solution={0: 0, 1: 0, 2: 0}),
+            "status: limit reached  overtime: 60 min  bound: none yet  gap: undefined",
+        ),
+        (
+            Result(Status.LIMIT_REACHED, objective=60.0, bound=45.0, gap=0.25, solution={0: 0, 1: 0, 2: 0}),
+            "status: limit reached  overtime: 60 min  bound: 45 min  gap: 25.00%",
+        ),
+    ],
+)
+def test_report_of_a_stopped_solve_shows_what_is_known(result: Result, expected: str) -> None:
+    lines = report(INSTANCE, seed=4, result=result).splitlines()
+    assert lines[1] == expected
+    assert len(lines) == (2 if result.objective is None else 4)
+
+
+def test_coverage_report_without_a_roster_shows_only_the_status() -> None:
+    stopped = Result(Status.LIMIT_REACHED, objective=None, bound=3.0, gap=None, solution={})
+    assert coverage_report(COVERAGE, seed=2, result=stopped).splitlines() == [
+        "Model 2: 3 half-hour slots, 2 shift patterns, seed 2",
+        "status: limit reached  no solution found  bound: 3 paid half-hours",
+    ]
+
+
+def test_too_few_handlers_prints_the_conflicting_constraints(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["solve", "--tasks", "10", "--seed", "1", "--handlers", "2"]) == 0
+    out = capsys.readouterr().out
+    assert "status: infeasible" in out
+    assert "  cover[0]" in out
+
+
+def test_work_limit_option_stops_the_solve_early(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["solve", "--tasks", "40", "--seed", "1", "--expose-search", "--work-limit", "0.5"]) == 0
+    assert "status: limit reached" in capsys.readouterr().out
+
+
+def test_a_negative_work_limit_is_reported_on_stderr(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["cover", "--work-limit", "-1"]) == 2
+    assert "work limit must be zero or more" in capsys.readouterr().err

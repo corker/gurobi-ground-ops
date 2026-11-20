@@ -3,14 +3,14 @@
 The formulation is in the README's Models section.
 """
 
-from pathlib import Path
+import math
 
 import gurobipy as gp
 from gurobipy import GRB
 
 from ground_ops.domain import CoverageInstance, Result, Status, covers, paid_slots
 from ground_ops.progress import ProgressRecorder, phase
-from ground_ops.solver import check_size, gurobi_env
+from ground_ops.solver import DEFAULT_SETTINGS, SolverSettings, check_size, gurobi_env
 
 
 def build_model(instance: CoverageInstance, env: gp.Env) -> tuple[gp.Model, gp.tupledict[int, gp.Var]]:
@@ -30,27 +30,36 @@ def solve_coverage(
     instance: CoverageInstance,
     *,
     recorder: ProgressRecorder | None = None,
-    log_file: Path | None = None,
-    expose_search: bool = False,
+    settings: SolverSettings = DEFAULT_SETTINGS,
 ) -> Result:
     if not instance.demand:
         raise ValueError("an instance needs at least one demand slot")
-    with gurobi_env(log_file=log_file, expose_search=expose_search) as env:
+    with gurobi_env(settings) as env:
         with phase(recorder, "build model"):
             model, y = build_model(instance, env)
         with model:
             check_size(model)
             with phase(recorder, "solve"):
                 model.optimize(recorder)
-            if recorder is not None and model.Status == GRB.OPTIMAL:
+            if recorder is not None:
                 recorder.finish(model)
+            if model.Status == GRB.INFEASIBLE:
+                return Result(Status.INFEASIBLE, objective=None, bound=None, gap=None, solution={})
             return _result(model, y)
 
 
 def _result(model: gp.Model, y: gp.tupledict[int, gp.Var]) -> Result:
-    if model.Status == GRB.INFEASIBLE:
-        return Result(Status.INFEASIBLE, objective=None, bound=None, gap=None, solution={})
-    if model.Status == GRB.OPTIMAL:
-        staffing = {pattern_id: people for pattern_id, var in y.items() if (people := round(var.X)) > 0}
-        return Result(Status.OPTIMAL, model.ObjVal, model.ObjBound, model.MIPGap, staffing)
-    raise RuntimeError(f"Gurobi stopped with status code {model.Status}, which this version doesn't handle yet.")
+    match model.Status:
+        case GRB.OPTIMAL:
+            status = Status.OPTIMAL
+        case GRB.WORK_LIMIT:
+            status = Status.LIMIT_REACHED
+        case code:
+            raise RuntimeError(f"Gurobi stopped with status code {code}, which this version doesn't handle yet.")
+    # Before the first bound or incumbent, Gurobi reports them as infinite.
+    bound = model.ObjBound if math.isfinite(model.ObjBound) else None
+    if not model.SolCount:
+        return Result(status, objective=None, bound=bound, gap=None, solution={})
+    gap = model.MIPGap if math.isfinite(model.MIPGap) else None
+    staffing = {pattern_id: people for pattern_id, var in y.items() if (people := round(var.X)) > 0}
+    return Result(status, model.ObjVal, bound, gap, staffing)

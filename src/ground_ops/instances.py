@@ -1,6 +1,7 @@
 """Seeded synthetic instances. Where the numbers come from is in docs/domain.md."""
 
 import random
+from dataclasses import replace
 
 from ground_ops.domain import GAP_MINUTES, AssignmentInstance, CoverageInstance, Handler, ShiftPattern, Task
 
@@ -36,18 +37,34 @@ def peak_concurrency(tasks: tuple[Task, ...]) -> int:
     return max((sum(1 for t in tasks if t.start <= p.start < t.end + GAP_MINUTES) for p in tasks), default=0)
 
 
-def generate_assignment(n_tasks: int, seed: int) -> AssignmentInstance:
-    """Model 1 instance with two baggage tasks per turnaround and one spare handler."""
+def generate_assignment(n_tasks: int, seed: int, n_handlers: int | None = None) -> AssignmentInstance:
+    """Model 1 instance with two baggage tasks per turnaround.
+
+    By default there is one spare handler beyond the peak overlap. Fewer than the peak overlap makes it infeasible;
+    the handlers are drawn in order, so a smaller count keeps the first handlers of the default instance.
+    """
     if n_tasks < TASKS_PER_TURNAROUND or n_tasks % TASKS_PER_TURNAROUND:
         raise ValueError(f"the task count must be a positive multiple of {TASKS_PER_TURNAROUND}, got {n_tasks}")
+    if n_handlers is not None and n_handlers < 0:
+        raise ValueError(f"the handler count can't be negative, got {n_handlers}")
     rng = random.Random(seed)
     tasks = tuple(t for i in range(0, n_tasks, TASKS_PER_TURNAROUND) for t in _turnaround_tasks(rng, i))
     handlers = tuple(
         Handler(h, start, start + rng.choice(SHIFT_LENGTHS))
-        for h in range(peak_concurrency(tasks) + 1)
+        for h in range(peak_concurrency(tasks) + 1 if n_handlers is None else n_handlers)
         for start in [rng.choice(SHIFT_STARTS)]
     )
     return AssignmentInstance(tasks, handlers)
+
+
+def move_task(instance: AssignmentInstance, task_id: int, minutes: int) -> AssignmentInstance:
+    """The same instance with one task shifted in time, as when a flight is delayed."""
+    if all(t.id != task_id for t in instance.tasks):
+        raise ValueError(f"there is no task {task_id}")
+    tasks = tuple(
+        replace(t, start=t.start + minutes, end=t.end + minutes) if t.id == task_id else t for t in instance.tasks
+    )
+    return replace(instance, tasks=tasks)
 
 
 SLOTS_PER_DAY = 48

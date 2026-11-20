@@ -1,6 +1,6 @@
 import pytest
 
-from ground_ops.domain import paid_slots
+from ground_ops.domain import AssignmentInstance, paid_slots
 from ground_ops.instances import (
     ARRIVALS_FROM,
     LOAD,
@@ -8,6 +8,7 @@ from ground_ops.instances import (
     UNLOAD,
     generate_assignment,
     generate_coverage,
+    move_task,
     peak_concurrency,
     shift_patterns,
 )
@@ -66,3 +67,26 @@ def test_coverage_demand_is_seeded_and_needs_someone_in_every_slot() -> None:
     assert instance == generate_coverage(seed=5)
     assert len(instance.demand) == SLOTS_PER_DAY
     assert min(instance.demand) >= 1
+
+
+def test_fewer_handlers_keeps_the_first_handlers_of_the_default_instance() -> None:
+    default = generate_assignment(20, seed=1)
+    assert generate_assignment(20, seed=1, n_handlers=2) == AssignmentInstance(default.tasks, default.handlers[:2])
+
+
+def test_handler_count_cant_be_negative() -> None:
+    with pytest.raises(ValueError, match="can't be negative"):
+        generate_assignment(4, seed=1, n_handlers=-1)
+
+
+def test_moving_a_task_shifts_only_that_task() -> None:
+    before = generate_assignment(6, seed=1)
+    after = move_task(before, task_id=2, minutes=25)
+    moved = {t.id: (a.start - t.start, a.end - t.end) for t, a in zip(before.tasks, after.tasks, strict=True)}
+    assert moved == {0: (0, 0), 1: (0, 0), 2: (25, 25), 3: (0, 0), 4: (0, 0), 5: (0, 0)}
+    assert after.handlers == before.handlers
+
+
+def test_moving_a_task_that_doesnt_exist_is_rejected() -> None:
+    with pytest.raises(ValueError, match="no task 99"):
+        move_task(generate_assignment(4, seed=1), task_id=99, minutes=5)

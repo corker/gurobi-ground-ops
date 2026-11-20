@@ -6,13 +6,13 @@ import time
 from ground_ops.instances import generate_assignment
 from ground_ops.model1 import build_model
 from ground_ops.progress import ProgressRecorder
-from ground_ops.solver import gurobi_env
+from ground_ops.solver import SolverSettings, gurobi_env
 
 REPEATS = 5
 
 
 def solve(seed: int, with_callback: bool) -> tuple[float, int, float]:
-    with gurobi_env(expose_search=True) as env:
+    with gurobi_env(SolverSettings(expose_search=True)) as env:
         model, _ = build_model(generate_assignment(40, seed), env)
         with model:
             start = time.perf_counter()

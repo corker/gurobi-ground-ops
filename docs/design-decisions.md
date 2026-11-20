@@ -19,7 +19,7 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 | 5 | Solver behaviour and tests | Second solver backend | None: Gurobi only (decided) | High (95%) |
 | 6 | Solver behaviour and tests | Telemetry metrics and instruments | Seven Gurobi callback metrics; observable gauges for active runs (D21) | High (85%) |
 | 7 | Solver behaviour and tests | Early-stop test | `WorkLimit`, asserting a "limit reached, feasible" status and a non-zero gap | High (95%) |
-| 8 | Solver behaviour and tests | Warm start | `Start` attribute; report work units across seeds; expect a small effect | Medium (80%) |
+| 8 | Solver behaviour and tests | Warm start | `Start` attribute; report work units across seeds; measured: no consistent gain | High (85%) |
 | 9 | Solver behaviour and tests | Infeasibility diagnosis | Gurobi IIS with readable constraint names | High (90%) |
 | 10 | Solver behaviour and tests | Golden tests | Assert the objective and feasibility, never a specific assignment | High (95%) |
 | 11 | Licence and models | Instance realism | Base task durations on the turnaround dataset in related work | High (85%) |
@@ -149,7 +149,9 @@ Instruments, measured with `InMemoryMetricReader` on SDK 1.45.2: a synchronous g
 
 Reproducibility, measured: the same seed and thread count gave identical nodes (31,675), work (4.9858) and iterations (206,354) on two runs. With 4 threads instead of 1, the same model took 81,639 nodes and reached the same optimum.
 
-**Recommendation.** `WorkLimit`, already in `AGENTS.md`.
+Re-measured by [`experiments/threads.py`](../experiments/threads.py) on five 40-task instances with the search exposed (results in [experiments.md](experiments.md#one-thread-against-four-d7)): four threads explored a different number of nodes from one thread on four of the five, reached the same optimum on all five, and every run repeated exactly. Gurobi's [WorkLimit reference](https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html) says work limits are deterministic, and its [determinism article](https://support.gurobi.com/hc/en-us/articles/360031636051) says the same model and parameters give the same results on the same computer and Gurobi version, with multiple threads too. Neither says results depend on the thread count; that part is measured, not documented.
+
+**Recommendation.** `WorkLimit`, already in `AGENTS.md`. Built in Step 6: a solve stopped by `WorkLimit` (status 16, `WORK_LIMIT`) returns "limit reached" with its best solution, bound and gap; a bound or gap Gurobi reports as infinite (no bound yet) becomes "none".
 
 **Confidence: High (95%).**
 
@@ -169,7 +171,9 @@ A partial `Start`, which leaves the moved task's variables undefined, gave a med
 
 **Recommendation.** Use `Start` (Gurobi's [variable attribute](https://docs.gurobi.com/projects/optimizer/en/current/reference/attributes/variable.html), which may be partial). Report the work-unit distribution across seeds, as lens 13 requires. State the result honestly, even if it's "no measurable gain", with the explanation above. It makes a good lesson on incumbent versus bound.
 
-**Confidence: Medium (80%)** that the effect stays small on this repo's instances, across three variants and two settings. Model 2 can't be used to check it: it solved at the root even with presolve, cuts and heuristics off, so there's nothing for a warm start to speed up. **To raise it:** run 20 seeds instead of 3 when the real experiment script exists, and report the distributions.
+Re-measured by [`experiments/warm_start.py`](../experiments/warm_start.py) on 20 seeds of 40 tasks, one task delayed 25 minutes, search exposed ([results](experiments.md#warm-start-against-cold-start-d8)): median work 0.137 cold, 0.146 with the full previous schedule and 0.155 with a partial one. The full start needed less work on 7 of 20 seeds and the partial one on 12. On seed 4 both starts took 45.6 work units against 3.7 cold: the start changed the search path, and that path proved the bound far more slowly. Gurobi's [determinism article](https://support.gurobi.com/hc/en-us/articles/360031636051) lists a starting solution among the inputs that may change results. Why this path is slower is unverified.
+
+**Confidence: High (85%)** that a warm start brings no consistent gain on this repo's instances: 20 seeds, two start variants, and the earlier 9-run measurement agree. Model 2 can't be used to check it: it solved at the root even with presolve, cuts and heuristics off, so there's nothing for a warm start to speed up.
 
 ## 9. Infeasibility diagnosis
 
@@ -182,6 +186,8 @@ Measured: Model 1 with 3 handlers (fewer than the peak overlap) is infeasible. G
 | Elastic cover (penalised slack variables in the model) | Which tasks can't be covered | Any solver |
 
 **Recommendation.** An IIS on Gurobi, as the plan requires, with readable constraint names. `feasRelax` and an elastic cover are optional later additions.
+
+Built in Step 6 for Model 1: an infeasible solve calls [`computeIIS`](https://docs.gurobi.com/projects/optimizer/en/current/reference/python/model.html) and returns the names of the constraints with [`IISConstr`](https://docs.gurobi.com/projects/optimizer/en/current/reference/attributes/constraintlinear.html) set. Gurobi says the IIS it returns "is not necessarily the smallest one"; every IIS computed here without a work limit reported `IISMinimal = 1`, and none included variable bounds (Gurobi's variable reference says binary bounds never do). All 200 infeasible solves in [`experiments/infeasible_status.py`](../experiments/infeasible_status.py) (five sizes, 20 seeds, with and without the search exposed) returned status 3, `INFEASIBLE`, never 4, `INF_OR_UNBD`. `computeIIS` obeys `WorkLimit` too, and a cut-short IIS is reported with `IISMinimal = 0` and more constraints than needed (111 instead of 45 on one instance), so the limit is lifted before the IIS is computed. Model 2 can only be infeasible when a slot has demand that no pattern covers, which the generated instances never have, so it reports infeasible without an IIS.
 
 **Confidence: High (90%).**
 

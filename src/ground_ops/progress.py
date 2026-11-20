@@ -3,6 +3,7 @@
 Callback codes: https://docs.gurobi.com/projects/optimizer/en/current/reference/numericcodes/callbacks.html
 """
 
+import math
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, replace
@@ -19,15 +20,15 @@ class Progress:
     elapsed: float
     work: float
     incumbent: float | None
-    bound: float
+    bound: float | None
     nodes: int
     iterations: int
     improvements: int
 
     @property
     def gap(self) -> float | None:
-        """Gurobi's MIP gap, |incumbent - bound| / |incumbent|; None until there is an incumbent."""
-        if self.incumbent is None:
+        """Gurobi's MIP gap, |incumbent - bound| / |incumbent|; None until there are both."""
+        if self.incumbent is None or self.bound is None:
             return None
         if self.incumbent == self.bound:
             return 0.0
@@ -57,7 +58,8 @@ class ProgressRecorder:
             elapsed=model.Runtime,
             work=model.Work,
             incumbent=model.ObjVal if model.SolCount else None,
-            bound=model.ObjBound,
+            # Gurobi reports a missing bound as infinite: a solve stopped before the root relaxation, or infeasible.
+            bound=model.ObjBound if math.isfinite(model.ObjBound) else None,
             nodes=int(model.NodeCount),
             iterations=int(model.IterCount),
             improvements=self._improvements,

@@ -5,11 +5,12 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from ground_ops.domain import AssignmentInstance, CoverageInstance, Result, ShiftPattern, covers, overtime
+from ground_ops.domain import AssignmentInstance, CoverageInstance, Result, ShiftPattern, Status, covers, overtime
 from ground_ops.instances import generate_assignment, generate_coverage
 from ground_ops.model1 import solve_assignment
 from ground_ops.model2 import solve_coverage
 from ground_ops.progress import ProgressRecorder, phase
+from ground_ops.solver import SolverSettings
 from ground_ops.telemetry import telemetry_from_environment
 
 
@@ -30,14 +31,30 @@ def _schedule_lines(instance: AssignmentInstance, result: Result) -> list[str]:
     return lines
 
 
+def _summary(result: Result, objective: str, unit: str) -> str:
+    """The status line: the best solution against its bound, or that there is none yet."""
+    bound = "none yet" if result.bound is None else f"{result.bound:g} {unit}"
+    if result.objective is None:
+        return f"status: {result.status}  no solution found  bound: {bound}"
+    gap = "undefined" if result.gap is None else f"{result.gap * 100:.2f}%"
+    return f"status: {result.status}  {objective}: {result.objective:g} {unit}  bound: {bound}  gap: {gap}"
+
+
 def report(instance: AssignmentInstance, seed: int, result: Result) -> str:
-    """The text `ground-ops solve` prints for an optimal result."""
+    """The text `ground-ops solve` prints: the schedule, or the conflicting constraints when infeasible."""
     header = f"Model 1: {len(instance.tasks)} tasks, {len(instance.handlers)} handlers, seed {seed}"
-    summary = (
-        f"status: {result.status}  overtime: {result.objective:g} min  "
-        f"bound: {result.bound:g} min  gap: {(result.gap or 0.0) * 100:.2f}%"
-    )
-    return "\n".join([header, summary, *_schedule_lines(instance, result)])
+    if result.status is Status.INFEASIBLE:
+        return "\n".join(
+            [
+                header,
+                "status: infeasible",
+                "these constraints can't all hold, though any one fewer can (there may be other conflicts too):",
+                *(f"  {name}" for name in result.iis),
+                "(cover[t]: task t needs one handler; no_overlap[hH,tA,tB]: handler H can't do both A and B)",
+            ]
+        )
+    lines = _schedule_lines(instance, result) if result.solution else []
+    return "\n".join([header, _summary(result, "overtime", "min"), *lines])
 
 
 def _slot_clock(slot: int) -> str:
@@ -50,12 +67,14 @@ def _pattern_label(pattern: ShiftPattern) -> str:
 
 
 def coverage_report(instance: CoverageInstance, seed: int, result: Result) -> str:
-    """The text `ground-ops cover` prints for an optimal result."""
+    """The text `ground-ops cover` prints: the roster, and demand against people on duty."""
     patterns = {p.id: p for p in instance.patterns}
+    header = f"Model 2: {len(instance.demand)} half-hour slots, {len(instance.patterns)} shift patterns, seed {seed}"
+    if result.objective is None:
+        return "\n".join([header, _summary(result, "cost", "paid half-hours")])
     lines = [
-        f"Model 2: {len(instance.demand)} half-hour slots, {len(instance.patterns)} shift patterns, seed {seed}",
-        f"status: {result.status}  cost: {result.objective:g} paid half-hours  "
-        f"bound: {result.bound:g} paid half-hours  gap: {(result.gap or 0.0) * 100:.2f}%",
+        header,
+        _summary(result, "cost", "paid half-hours"),
         "roster:",
     ]
     for pattern_id, people in sorted(result.solution.items(), key=lambda item: patterns[item[0]].start):
@@ -87,14 +106,21 @@ def main(argv: list[str] | None = None) -> int:
     solver_options.add_argument(
         "--expose-search", action="store_true", help="set Presolve=0 and Cuts=0 so the search is visible"
     )
+    solver_options.add_argument(
+        "--work-limit", type=float, help="stop after this many work units and report the best solution so far"
+    )
     parser = argparse.ArgumentParser(prog="ground-ops")
     commands = parser.add_subparsers(dest="command", required=True)
     solve = commands.add_parser(
         "solve", parents=[solver_options], help="solve a seeded Model 1 instance and print the schedule"
     )
     solve.add_argument("--tasks", type=int, default=30, help="number of tasks, even (default: 30)")
+    solve.add_argument(
+        "--handlers", type=int, help="number of handlers (default: one more than the most tasks that overlap)"
+    )
     commands.add_parser("cover", parents=[solver_options], help="solve a seeded Model 2 instance and print the roster")
     args = parser.parse_args(argv)
+    settings = SolverSettings(log_file=args.log, expose_search=args.expose_search, work_limit=args.work_limit)
 
     try:
         if args.command == "cover":
@@ -102,9 +128,7 @@ def main(argv: list[str] | None = None) -> int:
             def solve_cover(recorder: ProgressRecorder | None) -> tuple[CoverageInstance, Result]:
                 with phase(recorder, "generate instance"):
                     coverage = generate_coverage(args.seed)
-                return coverage, solve_coverage(
-                    coverage, recorder=recorder, log_file=args.log, expose_search=args.expose_search
-                )
+                return coverage, solve_coverage(coverage, recorder=recorder, settings=settings)
 
             coverage, result = _with_telemetry("coverage", solve_cover)
             print(coverage_report(coverage, args.seed, result))
@@ -112,8 +136,8 @@ def main(argv: list[str] | None = None) -> int:
 
         def solve_tasks(recorder: ProgressRecorder | None) -> tuple[AssignmentInstance, Result]:
             with phase(recorder, "generate instance"):
-                instance = generate_assignment(args.tasks, args.seed)
-            result = solve_assignment(instance, recorder=recorder, log_file=args.log, expose_search=args.expose_search)
+                instance = generate_assignment(args.tasks, args.seed, args.handlers)
+            result = solve_assignment(instance, recorder=recorder, settings=settings)
             return instance, result
 
         instance, result = _with_telemetry("assignment", solve_tasks)

@@ -9,7 +9,7 @@ from ground_ops.instances import generate_assignment, generate_coverage
 from ground_ops.model1 import build_model, solve_assignment
 from ground_ops.model2 import solve_coverage
 from ground_ops.progress import Progress, ProgressRecorder
-from ground_ops.solver import gurobi_env
+from ground_ops.solver import SolverSettings, gurobi_env
 from ground_ops.telemetry import PROCESS_START, export_interval_ms, telemetry_from_environment
 from tests.support import InMemoryTelemetry
 
@@ -39,26 +39,34 @@ def exported(reader: InMemoryMetricReader) -> dict[str, list[tuple[dict[str, obj
 
 @pytest.mark.parametrize(
     ("incumbent", "bound", "expected"),
-    [(None, 5.0, None), (8.0, 8.0, 0.0), (10.0, 6.0, 0.4), (0.0, -2.0, None)],
+    [(None, 5.0, None), (8.0, None, None), (8.0, 8.0, 0.0), (10.0, 6.0, 0.4), (0.0, -2.0, None)],
 )
-def test_gap_is_relative_to_the_incumbent_and_undefined_without_one(
-    incumbent: float | None, bound: float, expected: float | None
+def test_gap_is_relative_to_the_incumbent_and_undefined_without_both(
+    incumbent: float | None, bound: float | None, expected: float | None
 ) -> None:
     assert Progress(0.0, 0.0, incumbent, bound, 0, 0, 0).gap == expected
 
 
-def solve_both_ways(expose_search: bool) -> list[tuple[ProgressRecorder, Result]]:
+def solve_both_ways(settings: SolverSettings) -> list[tuple[ProgressRecorder, Result]]:
     m1, m2 = ProgressRecorder("m1"), ProgressRecorder("m2")
     return [
-        (m1, solve_assignment(generate_assignment(30, seed=1), recorder=m1, expose_search=expose_search)),
-        (m2, solve_coverage(generate_coverage(seed=1), recorder=m2, expose_search=expose_search)),
+        (m1, solve_assignment(generate_assignment(40, seed=1), recorder=m1, settings=settings)),
+        (m2, solve_coverage(generate_coverage(seed=1), recorder=m2, settings=settings)),
     ]
 
 
-@pytest.mark.parametrize("expose_search", [False, True])
-def test_final_recorded_progress_equals_the_solve_result(expose_search: bool) -> None:
+@pytest.mark.parametrize(
+    "settings",
+    [
+        SolverSettings(),
+        SolverSettings(expose_search=True),
+        SolverSettings(expose_search=True, work_limit=0.001),
+        SolverSettings(expose_search=True, work_limit=0),
+    ],
+)
+def test_final_recorded_progress_equals_the_solve_result(settings: SolverSettings) -> None:
     # The last MIP callback can run before the final bound and incumbent, so this fails without recorder.finish.
-    for recorder, result in solve_both_ways(expose_search):
+    for recorder, result in solve_both_ways(settings):
         assert recorder.latest is not None
         assert recorder.latest.incumbent == result.objective
         assert recorder.latest.bound == result.bound
@@ -68,7 +76,7 @@ def test_final_recorded_progress_equals_the_solve_result(expose_search: bool) ->
 
 def test_final_recorded_nodes_and_iterations_equal_gurobis_own_counters() -> None:
     recorder = ProgressRecorder("x")
-    with gurobi_env(expose_search=True) as env:
+    with gurobi_env(SolverSettings(expose_search=True)) as env:
         model, _ = build_model(generate_assignment(30, seed=1), env)
         with model:
             model.optimize(recorder)
@@ -80,7 +88,7 @@ def test_final_recorded_nodes_and_iterations_equal_gurobis_own_counters() -> Non
 
 def test_exposing_the_search_explores_nodes() -> None:
     recorder = ProgressRecorder("x")
-    solve_assignment(generate_assignment(30, seed=1), recorder=recorder, expose_search=True)
+    solve_assignment(generate_assignment(30, seed=1), recorder=recorder, settings=SolverSettings(expose_search=True))
     assert recorder.latest is not None
     assert recorder.latest.nodes > 1
 
@@ -90,7 +98,9 @@ def test_a_run_exports_every_metric_with_its_final_values_then_stops_being_repor
 ) -> None:
     reader = in_memory.metrics
     with in_memory.telemetry.run("assignment") as recorder:
-        result = solve_assignment(generate_assignment(30, seed=1), recorder=recorder, expose_search=True)
+        result = solve_assignment(
+            generate_assignment(30, seed=1), recorder=recorder, settings=SolverSettings(expose_search=True)
+        )
 
     metrics = exported(reader)
     assert set(metrics) == METRIC_NAMES
@@ -126,7 +136,10 @@ def test_a_log_file_is_written_and_nothing_goes_to_the_console(
     tmp_path: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
     log = tmp_path / "gurobi.log"
-    solve_assignment(generate_assignment(30, seed=1), log_file=log, expose_search=True)
+    solve_assignment(
+        generate_assignment(30, seed=1),
+        settings=SolverSettings(log_file=log, expose_search=True),
+    )
     assert "Expl Unexpl" in log.read_text()
     assert capfd.readouterr().out == ""
 
@@ -158,3 +171,25 @@ def test_gurobi_log_lines_are_exported_with_the_run_id_and_trace(in_memory: InMe
     assert any(body.startswith("Optimal solution found") for body in bodies)
     assert all(r.attributes is not None and r.attributes["run_id"] == recorder.run_id for r in records)
     assert {r.trace_id for r in records} == {root.context.trace_id}
+
+
+def test_an_infeasible_run_traces_the_iis_computation(in_memory: InMemoryTelemetry) -> None:
+    with in_memory.telemetry.run("assignment") as recorder:
+        solve_assignment(generate_assignment(10, seed=1, n_handlers=2), recorder=recorder)
+
+    assert {span.name for span in in_memory.spans.get_finished_spans()} == {
+        "ground-ops run",
+        "build model",
+        "solve",
+        "compute IIS",
+    }
+
+
+def test_an_infeasible_run_records_its_final_effort_with_no_incumbent_or_bound() -> None:
+    # With the search exposed, a progress callback reports a bound of 0 before Gurobi proves infeasibility.
+    recorder = ProgressRecorder("x")
+    instance = generate_assignment(40, seed=1, n_handlers=2)
+    solve_assignment(instance, recorder=recorder, settings=SolverSettings(expose_search=True))
+    assert recorder.latest is not None
+    assert (recorder.latest.incumbent, recorder.latest.bound) == (None, None)
+    assert recorder.latest.work > 0

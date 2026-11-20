@@ -15,7 +15,7 @@ What to build, in order, and when each step counts as done. The rules for *how* 
 | 3 | Model 2, shift coverage | Done |
 | 4 | Solver telemetry (the most important step) | Done |
 | 5 | Observability stack: LGTM in Docker Compose, dashboard, traces, logs | Done |
-| 6 | Operational edges: early stop, warm start, IIS, determinism | Not started |
+| 6 | Operational edges: early stop, warm start, IIS, determinism | Done |
 | 7 | Required test set | Not started |
 | 8 | API with live progress | Not started |
 | 9 | UI | Not started |
@@ -81,11 +81,11 @@ Start only after Model 1 is done and tested.
 - **Early stop:** stop after a given effort and return the best solution plus its gap. "Feasible but not proven optimal" is a normal result the caller can distinguish, not an error. Tests use `WorkLimit` (D7) and assert the result status "limit reached, feasible". Because default instances solve at the root (D4), these tests also switch on one solve option that exposes the search: `Presolve=0, Cuts=0`.
 - **Warm start:** re-solve a perturbed instance (one task moves) using the previous solution as a `Start`. Report the difference in work units (Gurobi's deterministic measure of solver effort, used instead of seconds) against a cold start across seeds, honestly, even if it's "no measurable gain" (D8).
 - **Infeasibility diagnosis:** compute an IIS on an infeasible instance and report the conflicting constraints readably (D9). The CLI must report infeasible results too; today `report` formats only optimal ones.
-- **Determinism:** pin `Seed` and `Threads`. Document that Gurobi's results depend on the thread count, and which settings make a run reproducible (D7).
+- **Determinism:** pin `Seed` and `Threads`. Document which settings make a run reproducible, and measure whether the thread count changes the search (Gurobi's docs don't say; D7).
 
-The progress recorder takes its final sample from the model only on an optimal result. When the early stop adds "limit reached", it must finish on that status too, or the last exported values will be stale.
+The progress recorder takes its final sample from the model after every solve, so an infeasible run's last exported values are its own, not a mid-run bound.
 
-**Done when:** each of the four edges has a test: the early stop returns "limit reached, feasible" with a non-zero gap; the warm-start comparison runs and reports its numbers; the IIS names the conflicting constraints; two runs with the same `Seed` and `Threads` give the same node count.
+**Done when:** each of the four edges has a test: the early stop returns "limit reached, feasible" with a non-zero gap; the warm-start comparison runs and reports its numbers (`experiments/warm_start.py`; a test checks that the start is used and reaches the cold optimum); the IIS names the conflicting constraints; two runs with the same `Seed` and `Threads` give the same node count.
 
 ## Step 7: Tests
 

@@ -6,20 +6,23 @@ from ground_ops.instances import generate_assignment, generate_coverage
 from ground_ops.model1 import solve_assignment
 from ground_ops.model2 import solve_coverage
 from ground_ops.progress import ProgressRecorder
+from ground_ops.solver import SolverSettings
 
 SEEDS = range(1, 21)
 
 
 def assignment_nodes(n_tasks: int, seed: int, exposed: bool) -> int:
     recorder = ProgressRecorder("experiment")
-    solve_assignment(generate_assignment(n_tasks, seed), recorder=recorder, expose_search=exposed)
+    solve_assignment(
+        generate_assignment(n_tasks, seed), recorder=recorder, settings=SolverSettings(expose_search=exposed)
+    )
     assert recorder.latest is not None
     return recorder.latest.nodes
 
 
 def coverage_nodes(seed: int, exposed: bool) -> int:
     recorder = ProgressRecorder("experiment")
-    solve_coverage(generate_coverage(seed), recorder=recorder, expose_search=exposed)
+    solve_coverage(generate_coverage(seed), recorder=recorder, settings=SolverSettings(expose_search=exposed))
     assert recorder.latest is not None
     return recorder.latest.nodes
 

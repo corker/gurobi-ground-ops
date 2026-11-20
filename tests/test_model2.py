@@ -7,6 +7,7 @@ from ground_ops.checks import coverage_shortfalls, total_paid_slots
 from ground_ops.domain import CoverageInstance, ShiftPattern, Status
 from ground_ops.instances import generate_coverage
 from ground_ops.model2 import solve_coverage
+from ground_ops.solver import SolverSettings
 
 # Worked by hand: all three 2-slot shifts, or the 4-slot shift plus the middle one, cost 6 paid slots.
 HAND_MADE = CoverageInstance(
@@ -70,3 +71,13 @@ def test_a_slot_no_pattern_covers_makes_the_instance_infeasible() -> None:
 def test_instance_without_demand_slots_is_rejected() -> None:
     with pytest.raises(ValueError, match="at least one demand slot"):
         solve_coverage(CoverageInstance(demand=(), patterns=()))
+
+
+def test_an_effort_limit_returns_a_feasible_roster_with_a_nonzero_gap() -> None:
+    instance = generate_coverage(seed=1)
+    result = solve_coverage(instance, settings=SolverSettings(expose_search=True, work_limit=0.001))
+    assert result.status is Status.LIMIT_REACHED
+    assert result.gap is not None
+    assert result.gap > 0
+    assert coverage_shortfalls(instance, result.solution) == []
+    assert total_paid_slots(instance, result.solution) == result.objective

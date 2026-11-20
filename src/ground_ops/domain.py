@@ -47,18 +47,24 @@ class CoverageInstance:
 
 class Status(StrEnum):
     OPTIMAL = "optimal"
+    LIMIT_REACHED = "limit reached"
     INFEASIBLE = "infeasible"
 
 
 @dataclass(frozen=True)
 class Result:
-    """A solve's outcome. `solution` maps task id to handler id (Model 1), or pattern id to people (Model 2)."""
+    """A solve's outcome. `solution` maps task id to handler id (Model 1), or pattern id to people (Model 2).
+
+    `iis` names the constraints of an irreducible inconsistent subsystem when Model 1 is infeasible: they can't all
+    hold, but removing any one of them lets the rest of the list hold. The model may have other conflicts too.
+    """
 
     status: Status
     objective: float | None
     bound: float | None
     gap: float | None
     solution: Mapping[int, int]
+    iis: tuple[str, ...] = ()
 
 
 def conflict(a: Task, b: Task) -> bool:
