@@ -2,7 +2,7 @@
 
 I'm a backend/platform engineer picking up Gurobi — I'm not an optimisation modeller. The models here are small and textbook, chosen because airport ground operations has the clearest real-world assignment and covering problems. The part I care about is what surrounds the solve: telemetry, deterministic tests, time limits, warm starts, infeasibility diagnosis.
 
-> **Status: Step 1 of 9 done** (project setup and a licence smoke test). Nothing else below is built yet. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
+> **Status: Steps 1 and 2 of 9 done:** project setup, and Model 1 with its CLI. Everything else below is planned. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
 
 ## What it does (planned)
 
@@ -65,7 +65,52 @@ uv sync
 uv run pytest
 ```
 
-Today that runs one smoke test, which solves a tiny model to prove the free licence works. This section grows as each plan step lands.
+Solve a seeded Model 1 instance and print the schedule:
+
+```sh
+uv run ground-ops solve --tasks 10 --seed 3
+```
+
+```
+Model 1: 10 tasks, 6 handlers, seed 3
+status: optimal  overtime: 9 min  bound: 9 min  gap: 0.00%
+H0 shift 08:00-16:00: T1 08:45-09:02, T4 11:00-11:11, T3 11:24-11:33
+H1 shift 05:00-13:00: T9 07:43-08:01, T0 08:30-08:40, T7 11:18-11:31
+H2 shift 05:30-09:30: T2 11:00-11:09 (+9 overtime)
+H3 shift 09:30-13:30: T6 11:00-11:14
+H4 shift 07:00-11:00: no tasks
+H5 shift 07:00-13:00: T8 07:35-07:45, T5 11:08-11:27
+```
+
+`--tasks` must be even (two baggage tasks per turnaround). Up to 48 tasks fit the free licence for every seed tried (20 seeds per size); from 50 on, some seeds don't, and the command says so instead of solving. This section grows as each plan step lands.
+
+## Models
+
+### Model 1: who does which task
+
+Each task gets exactly one handler, no handler does two conflicting tasks, and total overtime is as small as possible. The terms are defined in [docs/domain.md](docs/domain.md).
+
+- $T$: tasks, each with a start $s_t$ and end $e_t$ in minutes.
+- $H$: handlers, each with a shift window.
+- $o_{ht}$: minutes of task $t$ outside handler $h$'s shift window.
+- $C$: pairs of tasks that conflict, because they're less than $g = 10$ minutes apart: $s_a < e_b + g$ and $s_b < e_a + g$.
+- $x_{ht} \in \{0, 1\}$: 1 if handler $h$ does task $t$.
+
+```math
+\min \sum_{h \in H} \sum_{t \in T} o_{ht} \, x_{ht}
+```
+
+```math
+\sum_{h \in H} x_{ht} = 1 \quad \forall t \in T \qquad \text{(cover)}
+```
+
+```math
+x_{ha} + x_{hb} \le 1 \quad \forall h \in H,\ (a, b) \in C \qquad \text{(no overlap)}
+```
+
+In the code ([model1.py](src/ground_ops/model1.py)) the constraints are named like `cover[3]` and `no_overlap[h0,t1,t2]`. The objective is overtime rather than travel time between consecutive tasks, because travel needs variables for task order and exceeds the free licence at about 25 tasks ([design decision 2](docs/design-decisions.md#2-model-1-objective)).
+
+The tests check optima without trusting Gurobi: an independent feasibility checker, brute-force enumeration of every assignment on small instances, and a hand-solved instance. The checker and the brute force reuse the same two rule functions as the model (the 10-minute gap and the overtime calculation), so those functions have their own unit tests.
 
 ## The free Gurobi licence
 

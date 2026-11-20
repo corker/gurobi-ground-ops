@@ -11,7 +11,7 @@ What to build, in order, and when each step counts as done. The rules for *how* 
 | Step | Goal | Status |
 | --- | --- | --- |
 | 1 | Project setup: package and a smoke test that proves the free licence works | Done |
-| 2 | Model 1, task assignment, with golden tests and the CLI | Not started |
+| 2 | Model 1, task assignment, with golden tests and the CLI | Done |
 | 3 | Model 2, shift coverage | Not started |
 | 4 | Solver telemetry (the most important step) | Not started |
 | 5 | Observability stack: LGTM in Docker Compose, dashboard, traces, logs | Not started |
@@ -40,7 +40,7 @@ The licence limits are already verified (D1): 2,000 variables and 2,000 linear c
 - `docs/domain.md`: the glossary and the list of simplifications (D12).
 - A seeded instance generator with tunable size, using task durations based on the turnaround dataset (D11).
 - The model (D2, D3): a binary variable x[h,t] for each handler and task; each task covered exactly once; pairwise no-overlap constraints with a uniform 10-minute gap between a handler's tasks (D3); the objective is minutes worked outside each handler's shift window. The formulation is written out in a new "Models" section of the README, with sets, variables, constraints and objective.
-- One frozen result type, shared by both models: status (optimal, limit reached, infeasible, interrupted), objective, bound, gap, the solution, and the IIS when infeasible.
+- One frozen result type, shared by both models: status, objective, bound, gap and the solution. It starts with the statuses this step can produce (optimal, infeasible); Step 6 adds "limit reached" and the IIS, and Step 8 adds "interrupted", each when first needed.
 - An independent feasibility checker in repo code, which doesn't trust the solver (lens 1).
 - A CLI, `ground-ops solve`, that runs a seeded instance and prints the result. Experiments and the log walkthrough use it.
 - Add `pytest-cov` and branch-coverage reporting (`--cov=ground_ops --cov-branch --cov-report=term-missing`) now that there's code to cover.
@@ -78,7 +78,7 @@ Start only after Model 1 is done and tested.
 
 - **Early stop:** stop after a given effort and return the best solution plus its gap. "Feasible but not proven optimal" is a normal result the caller can distinguish, not an error. Tests use `WorkLimit` (D7) and assert the result status "limit reached, feasible". Because default instances solve at the root (D4), these tests also switch on one solve option that exposes the search: `Presolve=0, Cuts=0`.
 - **Warm start:** re-solve a perturbed instance (one task moves) using the previous solution as a `Start`. Report the difference in work units (Gurobi's deterministic measure of solver effort, used instead of seconds) against a cold start across seeds, honestly, even if it's "no measurable gain" (D8).
-- **Infeasibility diagnosis:** compute an IIS on an infeasible instance and report the conflicting constraints readably (D9).
+- **Infeasibility diagnosis:** compute an IIS on an infeasible instance and report the conflicting constraints readably (D9). The CLI must report infeasible results too; today `report` formats only optimal ones.
 - **Determinism:** pin `Seed` and `Threads`. Document that Gurobi's results depend on the thread count, and which settings make a run reproducible (D7).
 
 **Done when:** each of the four edges has a test: the early stop returns "limit reached, feasible" with a non-zero gap; the warm-start comparison runs and reports its numbers; the IIS names the conflicting constraints; two runs with the same `Seed` and `Threads` give the same node count.
