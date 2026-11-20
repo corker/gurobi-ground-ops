@@ -13,7 +13,7 @@ You describe the rules ("every task gets exactly one person", "nobody does two o
 - **The incumbent:** the best schedule found so far ("I have a plan with 55 minutes of overtime").
 - **The bound:** how good any schedule *could* possibly be ("I can prove nothing beats 35 minutes").
 
-The difference between them is the **gap**. When the gap closes, the solver has proven its plan is the best possible. Often it finds the best plan early and spends most of its time proving it. This repo is built to let you watch that happen:
+The difference between them is the **gap**. When the gap closes, the solver has proven its plan is the best possible. Often it finds the best plan early and spends most of its time proving it. This repo is planned to let you watch that happen. The first two of these come from the API and UI (plan Steps 8 and 9):
 
 - **Watch a solve:** gap, incumbent and bound update live, and you can cancel at any point and keep the best plan found so far.
 - **Inspect the answer:** a timeline per person shows their tasks and highlights the overtime, so you can judge whether the schedule makes operational sense.
@@ -29,40 +29,38 @@ The difference between them is the **gap**. When the gap closes, the solver has 
 - **Symmetry:** many equivalent solutions, such as two identical handlers swapped, which the solver may waste time exploring separately.
 - **Root node:** the first step of the search, before any branching. "Solved at the root" means no search was needed.
 - **Work units:** Gurobi's deterministic measure of effort. Unlike seconds, the same run always takes the same work.
-- **HiGHS:** a free, open-source solver, used here as the fallback.
 - **OTLP:** OpenTelemetry's protocol for sending metrics, traces and logs to a collector.
 - **SSE** (server-sent events): a standard way for a web server to push a stream of updates to a browser.
 
 ## How it fits together (planned)
 
 ```
-  browser (React UI) ──HTTP/SSE──▶ FastAPI (/api, 127.0.0.1)      ← optional, later
+  browser (React UI) ──HTTP/SSE──▶ FastAPI (/api, 127.0.0.1)
                                       │  one Gurobi environment per run
   CLI (ground-ops solve) ────────▶ core library
                                       ├─ instance generators (seeded)
                                       ├─ Model 1 and Model 2
-                                      ├─ Backend protocol: Gurobi | HiGHS
+                                      ├─ Gurobi solve
                                       └─ telemetry (solver callback)
-                                            │ OTLP                │ no collector
-                                            ▼                     ▼
-                          docker compose: grafana/otel-lgtm     stdout
+                                            │ OTLP, only when a collector is configured
+                                            ▼
+                          docker compose: grafana/otel-lgtm
                           (Prometheus, Tempo, Loki, Grafana)
-                          ← optional, later
 ```
 
-- **Core library (Python):** seeded instance generators, the two models, and one thin backend protocol with two implementations: Gurobi, and [HiGHS](https://github.com/ERGO-Code/HiGHS) as the open-source fallback. A solver callback emits the gap, incumbent, bound, incumbent improvements, node count, simplex iterations and elapsed time.
-- **Telemetry:** OpenTelemetry metrics, plus traces and logs. They go over OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and to stdout when it isn't. Metric export has been tested in a spike; traces and logs haven't yet.
-- **Observability stack (optional):** one [`grafana/otel-lgtm`](https://github.com/grafana/docker-otel-lgtm) container in Docker Compose, with a provisioned dashboard. The image is intended for development, demo and testing.
-- **API (optional):** FastAPI on `127.0.0.1`. Start a run, stream its progress over server-sent events, cancel it, fetch the result. Runs live in memory.
-- **UI (optional):** React, Vite and TypeScript, in three pages: new run, live run, result.
+- **Core library (Python):** seeded instance generators, the two models, and the Gurobi solve. A solver callback emits the gap, incumbent, bound, incumbent improvements, node count, simplex iterations, elapsed time and work units.
+- **Telemetry:** OpenTelemetry metrics, plus traces and logs. They go over OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set; when it isn't, nothing is exported. Metric export has been tested in a spike; traces and logs haven't yet.
+- **Observability stack:** one [`grafana/otel-lgtm`](https://github.com/grafana/docker-otel-lgtm) container in Docker Compose, with a provisioned dashboard. The image is intended for development, demo and testing.
+- **API:** FastAPI on `127.0.0.1`. Start a run, stream its progress over server-sent events, cancel it, fetch the result. Runs live in memory.
+- **UI:** React, Vite and TypeScript, in three pages: new run, live run, result.
 
-The core never depends on the optional layers. `uv run pytest` needs no Docker, no Node and no browser.
+The core library never imports the API or UI. `uv run pytest` needs no Docker, no Node and no browser; the UI has its own tests in `ui/`.
 
 ## The free Gurobi licence
 
 The `gurobipy` package from PyPI includes a size-limited licence: **2,000 variables and 2,000 linear constraints** (200 variables if there are quadratic terms), "for research, development, and evaluation purposes only" ([Gurobi: size limits](https://support.gurobi.com/hc/en-us/articles/360051597492), [Gurobi: restricted licence](https://support.gurobi.com/hc/en-us/articles/29682074018833)). Every instance in this repo will fit within it, so nothing will need a paid or academic licence.
 
-The bundled licence **expires per major version**. gurobipy 14.0.0 (released 2026-11-10, maintained by Gurobi Optimization) reports `expires 2028-11-29`. The repo will pin `gurobipy~=14.0`, and the pin will need a bump before that date. If the Gurobi licence is missing or expired, the same test suite is planned to run on HiGHS, apart from IIS, which HiGHS can't compute for a MIP.
+The bundled licence **expires per major version**. gurobipy 14.0.0 (released 2026-11-10, maintained by Gurobi Optimization) reports `expires 2028-11-29`. The repo will pin `gurobipy~=14.0`, and the pin will need a bump to the next major version before that date, which brings a new bundled licence.
 
 ## Reading the gap and the bound
 
@@ -80,13 +78,14 @@ A stuck solve means different things depending on which number is stuck:
 | **Bound won't move** | The solver can't prove the current answer is good | The formulation: a weak LP relaxation, symmetry. Usually a modelling question. |
 | Both stuck, gap large | Both of the above | Try a smaller instance first |
 
-One measured run shows the pattern. Model 1 with 30 tasks, presolve and cuts switched off so the search is visible, one thread, on an Apple M4 Pro: by 0.2 seconds the incumbent had fallen from 405 to 55, which turned out to be optimal, and the bound had risen from 0 to 35. Closing the rest of the gap, raising the bound from 35 to 55, took another 3.5 seconds. **The answer was found almost at once. Nearly all the time went into proving it.** With default settings, Gurobi 14 solved all 99 instances tried at the root node, in milliseconds (Model 1 with 20 to 35 tasks and Model 2 with 32 or 48 slots, 20 seeds each). That's why the visible-search demos switch presolve and cuts off ([design decision 4](docs/design-decisions.md#4-making-the-search-visible)).
+One measured run shows the pattern. Model 1 with 30 tasks, presolve and cuts switched off so the search is visible, one thread, on an Apple M4 Pro: by 0.2 seconds the incumbent had fallen from 405 to 55, which turned out to be optimal, and the bound had risen from 0 to 35. Closing the rest of the gap, raising the bound from 35 to 55, took another 3.5 seconds. **The answer was found almost at once. Nearly all the time went into proving it.** With default settings, Gurobi 14 solved all 99 instances that fit the free limit at the root node, in milliseconds (Model 1 with 20, 30 or 35 tasks and Model 2 with 32 or 48 slots, 20 seeds each). That's why the visible-search demos switch presolve and cuts off ([design decision 4](docs/design-decisions.md#4-making-the-search-visible)).
 
 ## What it deliberately doesn't do
 
 - **Model realistic operations.** There are no qualifications, breaks, teams, equipment or labour rules. The models stay textbook on purpose.
 - **Scale beyond the free licence,** or make any performance claim beyond what's measured and stated.
 - **Persist anything.** There's no database, job queue, authentication or multi-user state. Runs are lost on restart.
+- **Support other solvers.** It's about Gurobi; there's no solver abstraction.
 - **Deploy anywhere.** No Kubernetes, no CI/CD, and no container for the app itself.
 - **Use real data or names.** All instances are synthetic, with task durations based on a published turnaround dataset.
 

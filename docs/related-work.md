@@ -4,7 +4,7 @@ As of 2026-11-20.
 
 ## Summary
 
-No public project found combines the three things this repo is built around: airport ground-ops models, live solver telemetry, and tested operational edges (time limits, warm starts, IIS, determinism). Each part exists somewhere, but separately.
+No public project found combines the three things this repo is built around: airport ground-ops models, live solver telemetry, and tested operational edges (effort limits, warm starts, IIS, determinism). Each part exists somewhere, but separately.
 
 - **The models exist.** Academic papers formulate ground-staff task assignment and shift covering, but rarely publish code. Gurobi publishes workforce scheduling examples, but as notebooks without tests.
 - **Telemetry exists only after the solve.** Gurobi's gurobi-logtools parses log files once the solve is over. No project was found that streams callback metrics such as gap, bound and incumbent to OpenTelemetry or Prometheus while the solve runs.
@@ -61,14 +61,14 @@ The optimods workforce mod is related to Model 2, but it is a different problem:
 
 ## Workforce scheduling and rostering tools
 
-General-purpose solvers ship ready-made examples of both model shapes. The open-source fallback backend is HiGHS; [design-decisions.md](design-decisions.md) (D5) compares it with CP-SAT and PuLP.
+General-purpose solvers ship ready-made examples of both model shapes. This repo uses Gurobi only; [design-decisions.md](design-decisions.md) (D5) records how HiGHS, CP-SAT and PuLP compared before that decision.
 
 | Tool | Relevant examples | Version (PyPI) | Licence |
 | --- | --- | --- | --- |
 | [Google OR-Tools](https://github.com/google/or-tools) (14.4k stars) | `shift_scheduling_sat.py`, `tasks_and_workers_assignment_sat.py`, `assignment_with_constraints_sat.py` in [examples/python](https://github.com/google/or-tools/tree/main/examples/python) | 9.15.6755 (2026-01-14) | Apache-2.0 |
 | [CP-SAT Primer](https://github.com/d-krupke/cpsat-primer) (840 stars, pushed 2026-11-07) | A book-length guide to using and understanding CP-SAT, including its log | Docs, not versioned | CC-BY-4.0 |
-| [HiGHS](https://github.com/ERGO-Code/HiGHS) via `highspy` (1.9k stars) | Open-source LP/MIP solver with live MIP callbacks (bound, gap, nodes); the chosen fallback | 1.16.0 (2026-11-11) | MIT |
-| [PuLP](https://github.com/coin-or/pulp) (2.5k stars) | Modelling layer over CBC, HiGHS and other solvers; no airport examples | 4.3.1 (2026-11-19) | Listed as NOASSERTION on GitHub |
+| [HiGHS](https://github.com/ERGO-Code/HiGHS) via `highspy` (1.9k stars) | Open-source LP/MIP solver with live MIP callbacks (bound, gap, nodes) | 1.16.0 (2026-11-11) | MIT |
+| [PuLP](https://github.com/coin-or/pulp) (2.5k stars) | Modelling layer over CBC, HiGHS and other solvers; no airport examples | 4.3.1 (2026-11-19) | MIT on PyPI; GitHub lists NOASSERTION |
 | [Timefold quickstarts](https://github.com/TimefoldAI/timefold-quickstarts) (606 stars, pushed 2026-11-16) | `employee-scheduling`, `task-assigning` and `flight-crew-scheduling` use cases | Python `timefold` 1.24.0b0 (2025-07-08, beta) | Apache-2.0 |
 
 Timefold is the clearest contrast. It uses metaheuristics to produce good rosters quickly rather than to prove optimality, so it has no gap or bound to read.
@@ -106,7 +106,7 @@ Every neighbour focuses on the model, the data or the log after the fact. This r
 
 | Project | Ground-ops domain | Solver | Focus | Format | Licence |
 | --- | --- | --- | --- | --- | --- |
-| gurobi-ground-ops (this repo, planned) | Yes | Gurobi, plus an open-source fallback | Live telemetry, time limits, warm starts, IIS, determinism | Tested Python package | MIT |
+| gurobi-ground-ops (this repo, planned) | Yes | Gurobi | Live telemetry, effort limits, warm starts, IIS, determinism | Tested Python package | MIT |
 | RoyalSkye/AGH | Yes | CPLEX inside a learned LNS | Solving large instances faster | Research code | MIT |
 | spadrona dataset | Yes | None | Benchmark instances | Dataset | Apache-2.0 |
 | Gurobi workforce notebook | No (services industry) | Gurobi | Formulation | Notebook | Apache-2.0 |

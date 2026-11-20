@@ -16,7 +16,7 @@ Apply the first group to every feature, then the groups that match what the feat
 | 4 | **Code quality** | Is it the simplest version that meets the requirement, in scope, readable top to bottom, with one reason to change per module and no duplicate abstractions? See AGENTS.md: How to write code, Do NOT build. | ISO: maintainability; Google: design, complexity, naming |
 | 5 | **Tests** | Does every behaviour have a test that asserts on behaviour, at the right level, deterministically? See AGENTS.md: Tests. | ISO: testability; Google: tests |
 | 6 | **Installability** | Does `uv sync && uv run pytest` work on a clean machine with no licence, no collector, no network, no Docker and no Node? | ISO: flexibility (installability); AGH's CPLEX dependency |
-| 7 | **Security** | Are licence files and secrets kept out of git? Are dependencies pinned? Is untrusted input confined to the API (lens 18)? | ISO: security |
+| 7 | **Security** | Are licence files and secrets kept out of git? Are dependencies pinned? Is untrusted input confined to the API (lens 17)? | ISO: security |
 | 8 | **Documentation** | Would a backend engineer understand the feature cold in six months? Are modelling choices recorded in the README rather than in code comments? | Google: documentation |
 | 9 | **Honesty and licensing** | Is every claim verified, or labelled unverified, and every Gurobi API checked with its URL cited? No unmeasured numbers? Are new dependencies' licences compatible with MIT? See AGENTS.md: Hard rules. | Repo purpose |
 
@@ -27,24 +27,23 @@ Apply the first group to every feature, then the groups that match what the feat
 | 10 | **Formulation quality** | Is the model the textbook form, written out mathematically in the README and matching the code one-to-one? No big-M where a direct constraint works? Coefficients in a small range, with consistent units? Does symmetry between identical handlers stall the bound, and is that explained? | Papers; [Gurobi numerics guide](https://docs.gurobi.com/projects/optimizer/en/current/concepts/numericguide.html); `Symmetry` parameter |
 | 11 | **Instances** | Does every instance fit the free-licence size limit, with size set by a parameter of the seeded generator? Are the durations and time windows plausible against a paper or dataset in [related-work.md](related-work.md), and are the simplifications stated? | ISO: performance efficiency (capacity); papers use real data |
 
-### Solve, telemetry and backend features
+### Solve and telemetry features
 
 | # | Lens | Questions | Origin |
 | --- | --- | --- | --- |
-| 12 | **Observability** | Do the metrics alone show what the solve did: gap, incumbent, bound, incumbent improvements, nodes, iterations, elapsed time? Are names namespaced and lowercase, with UCUM units (`s`)? Are attributes low-cardinality, with one ID per run, unique across processes, on active-only instruments with an explicit cap (D21)? Does the stdout fallback show the same values? Do the final emitted values equal the model's final attributes? | Repo purpose; [OpenTelemetry conventions](https://opentelemetry.io/docs/specs/semconv/general/metrics/); the gap gurobi-logtools leaves |
+| 12 | **Observability** | Do the metrics alone show what the solve did: gap, incumbent, bound, incumbent improvements, nodes, iterations, elapsed time and work units? Are names namespaced and lowercase, with UCUM units (`s`)? Are attributes low-cardinality, with one ID per run, unique across processes, on active-only instruments with an explicit cap (D21)? Do the final emitted values equal the model's final attributes? | Repo purpose; [OpenTelemetry conventions](https://opentelemetry.io/docs/specs/semconv/general/metrics/); the gap gurobi-logtools leaves |
 | 13 | **Measurement discipline** | Is any timing comparison, such as warm start versus cold start, repeated across several `Seed` values, with the spread reported? Are the machine, Gurobi version and parameters stated? | [Gurobi on comparisons](https://support.gurobi.com/hc/en-us/articles/26992650628369) |
-| 14 | **Solver independence** | Does the same test suite pass on both backends? Does a backend that lacks a capability, such as IIS, say so in its result instead of faking it? | ISO: flexibility (replaceability) |
-| 15 | **Usability of outputs** | Is the IIS report readable without knowing Gurobi? Is the stdout telemetry readable while the solve runs? Do public functions take and return plain dataclasses? | ISO: interaction capability |
+| 14 | **Usability of outputs** | Is the IIS report readable without knowing Gurobi? Do public functions take and return plain dataclasses? | ISO: interaction capability |
 
 ### API and UI features
 
 | # | Lens | Questions | Origin |
 | --- | --- | --- | --- |
-| 16 | **API contract** | Does every solver status (optimal, limit reached, infeasible, interrupted) map to exactly one API status that the UI handles? Does a missing run return 404 before any stream starts? Are the TypeScript types generated from the OpenAPI schema? | Repo purpose; D17, D20 |
-| 17 | **Concurrency safety** | Does each run get its own Gurobi environment, created and freed under one lock (D17)? Is shared state (the run table, the samples) guarded? Can a cancel race with a run that has just finished? | [Gurobi race conditions](https://support.gurobi.com/hc/en-us/articles/40912136522129); Google: parallel programming |
-| 18 | **Input safety** | Is every request validated, and is an instance over the free-licence size rejected before it's built? Does the API bind to `127.0.0.1` only? | ISO: security |
-| 19 | **Solution inspection** | Can a non-modeller judge from the views alone whether the answer makes operational sense: who works when, where the overtime comes from, which tasks and handlers clash? | Repo purpose: formulation vs operational questions |
-| 20 | **Basic accessibility** | Semantic HTML, keyboard-reachable controls, readable contrast, and charts with a text label? | ISO: interaction capability (inclusivity) |
+| 15 | **API contract** | Does every solver status (optimal, limit reached, infeasible, interrupted) map to exactly one API status that the UI handles? Does a missing run return 404 before any stream starts? Are the TypeScript types generated from the OpenAPI schema? | Repo purpose; D17, D20 |
+| 16 | **Concurrency safety** | Does each run get its own Gurobi environment, created and freed under one lock (D17)? Is shared state (the run table, the samples) guarded? Can a cancel race with a run that has just finished? | [Gurobi race conditions](https://support.gurobi.com/hc/en-us/articles/40912136522129); Google: parallel programming |
+| 17 | **Input safety** | Is every request validated, and is an instance over the free-licence size rejected before it's built? Does the API bind to `127.0.0.1` only? | ISO: security |
+| 18 | **Solution inspection** | Can a non-modeller judge from the views alone whether the answer makes operational sense: who works when, where the overtime comes from, which tasks and handlers clash? | Repo purpose: formulation vs operational questions |
+| 19 | **Basic accessibility** | Semantic HTML, keyboard-reachable controls, readable contrast, and charts with a text label? | ISO: interaction capability (inclusivity) |
 
 ## Considered and out of scope
 
@@ -59,6 +58,7 @@ These lenses matter in related work, but not for this repo's purpose. If the sco
 | Uncertainty (stochastic demand, delays) | Disruption-management literature | Deterministic textbook models only. |
 | Safety | ISO: safety | Synthetic data that drives no real people or equipment. |
 | Availability, scalability of a service | ISO: reliability, flexibility | Local, single-user, run on demand. Runs are lost on restart. |
+| Solver independence (running the same suite on a second solver) | Research code tied to one commercial solver | Gurobi only, by choice (D5). The pip package's bundled licence already lets anyone run the tests. |
 | Authentication and multi-user state | ISO: security | Bound to `127.0.0.1`; one user. |
 | Privacy | ISO: security | No personal data. Generated IDs only, never real names. |
 | Cost, sustainability, internationalisation | Common architecture frameworks | No hosted infrastructure, no spend, English only. |
@@ -77,7 +77,7 @@ These lenses matter in related work, but not for this repo's purpose. If the sco
 | Academic papers (Tian 2022, Kiermaier 2020, Dall'Olio 2023, ...) | Formulation quality, solution methods for scale, realistic constraints (qualifications, breaks, teams) | Runnable code, reproducibility, telemetry, tests | Check the formulations and objectives against them |
 | Research code (AGH) | Performance at scale | Depends on CPLEX, a commercial solver. Tests and telemetry weren't checked. | Installability: everything must run on free tools |
 | Gurobi notebooks and optimods | Clear formulations, a gentle progression from simple to complex | Tests, determinism, time-limit and infeasibility handling and telemetry aren't their focus. Optimods hides the model. | Readable formulations, documented step by step |
-| OR-Tools examples, CP-SAT Primer | Breadth of model shapes, explanation of solver logs and parameters | Observability during the solve | Log literacy, backend comparison |
+| OR-Tools examples, CP-SAT Primer | Breadth of model shapes, explanation of solver logs and parameters | Observability during the solve | Log literacy |
 | Timefold | Fast, practical rosters | No bound or gap, so no proof of optimality | Contrast for the gap-and-bound explainer |
 | gurobi-logtools, CP-SAT-Log-Analyzer | Reading solver progress after the fact | Live metrics, integration with an observability stack | Contrast: live metrics during the solve instead of parsing logs afterwards |
 | Commercial suite (INFORM GroundStar) | Operational fit: real-time re-planning, real labour rules | Everything is closed, so solver behaviour can't be inspected | Motivates warm start as a re-planning edge |

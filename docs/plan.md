@@ -4,22 +4,21 @@ What to build, in order, and when each step counts as done. The rules for *how* 
 
 **The goal.** Afterwards, the owner can talk about solver behaviour without bluffing: read a Gurobi log, explain what the MIP gap and the bound are doing, and tell a formulation problem from an operational one. The code is the means, not the deliverable.
 
-**Stop rule.** If Model 1 takes longer than expected, stop after Model 1. One correct model beats two rushed ones. Steps 8 to 10 (observability stack, API, UI) come only after the core (Steps 1 to 7) is done, and nothing describes them as working until they are.
+**Stop rule.** If Model 1 takes longer than expected, stop after Model 1. One correct model beats two rushed ones. Nothing describes a step as working until it's done.
 
 ## Status
 
 | Step | Goal | Status |
 | --- | --- | --- |
-| 1 | Project setup: package, smoke test, licence check | Not started |
+| 1 | Project setup: package and a smoke test that proves the free licence works | Not started |
 | 2 | Model 1, task assignment, with golden tests and the CLI | Not started |
 | 3 | Model 2, shift coverage | Not started |
 | 4 | Solver telemetry (the most important step) | Not started |
-| 5 | Operational edges: early stop, warm start, IIS, determinism | Not started |
-| 6 | HiGHS fallback behind one protocol | Not started |
+| 5 | Observability stack: LGTM in Docker Compose, dashboard, traces, logs | Not started |
+| 6 | Operational edges: early stop, warm start, IIS, determinism | Not started |
 | 7 | Required test set | Not started |
-| 8 | Observability stack (optional) | Not started |
-| 9 | API with live progress (optional) | Not started |
-| 10 | UI (optional) | Not started |
+| 8 | API with live progress | Not started |
+| 9 | UI | Not started |
 
 Update this table in the same commit that finishes a step.
 
@@ -27,10 +26,10 @@ Update this table in the same commit that finishes a step.
 
 The licence limits are already verified (D1): 2,000 variables and 2,000 linear constraints, with the gurobipy 14 licence expiring on 2028-11-29.
 
-- Create the project with `uv init --package --name ground-ops`: a `src/ground_ops/` package, the `uv_build` backend, and a `ground-ops` command. Python 3.12+, pinned with `.python-version`.
-- Step 1 adds only what Step 1 uses: `gurobipy~=14.0`, plus `pytest` and `ruff` as dev dependencies, with ruff's default settings. Each later step adds its own dependencies when it first needs them, for example `highspy~=1.16` in Step 6 and the OpenTelemetry API and SDK in Step 4. The OTLP exporter (Step 4) and FastAPI with uvicorn (Step 9) are optional extras, so the core never needs them. Commit `uv.lock`.
+- Create the project with `uv init --package --name ground-ops`: a `src/ground_ops/` package, the `uv_build` backend, and a `ground-ops` command. `requires-python = ">=3.12"`, and `.python-version` set to `3.12`. Remove the generated hello-world entry point and stub; the `ground-ops` command arrives with `solve` in Step 2.
+- Step 1 adds only what Step 1 uses: `gurobipy~=14.0`, plus `pytest` and `ruff` as dev dependencies, with ruff's default settings. Each later step adds its own dependencies when it first needs them, for example the OpenTelemetry API and SDK in Step 4. The OTLP exporter arrives in Step 4, and FastAPI with uvicorn in Step 8. The core library never imports the API or UI. Commit `uv.lock`.
 - In `pyproject.toml`, `authors` lists the owner's name only. `uv init` copies the email address from git config, so remove it before committing; the repo is public.
-- A `.gitignore` covering the virtual environment, caches, Gurobi `*.log` and `*.ilp` files, and `gurobi.lic`. An MIT `LICENSE` in the owner's name.
+- A `.gitignore` covering the virtual environment, caches, Gurobi `*.log` and `*.ilp` files, and `gurobi.lic`. An MIT `LICENSE`: `Copyright (c) 2026` followed by the owner's name as it appears in `git config user.name`.
 - Tests live in `tests/`. A first smoke test solves a trivial model with gurobipy and checks that it reports optimal, which proves the free licence is active.
 - Keep the existing README. Add a "How to run" section once these commands work.
 
@@ -41,8 +40,9 @@ The licence limits are already verified (D1): 2,000 variables and 2,000 linear c
 - `docs/domain.md`: the glossary and the list of simplifications (D12).
 - A seeded instance generator with tunable size, using task durations based on the turnaround dataset (D11).
 - The model (D2, D3): a binary variable x[h,t] for each handler and task; each task covered exactly once; pairwise no-overlap constraints with a uniform 10-minute gap between a handler's tasks (D3); the objective is minutes worked outside each handler's shift window. The formulation is written out in a new "Models" section of the README, with sets, variables, constraints and objective.
+- One frozen result type, shared by both models: status (optimal, limit reached, infeasible, interrupted), objective, bound, gap, the solution, and the IIS when infeasible.
 - An independent feasibility checker in repo code, which doesn't trust the solver (lens 1).
-- A CLI, `ground-ops solve`, that runs a seeded instance and prints the result and telemetry to stdout. Experiments and the log walkthrough use it.
+- A CLI, `ground-ops solve`, that runs a seeded instance and prints the result. Experiments and the log walkthrough use it.
 
 **Done when:** golden tests pass that assert exact objectives on small fixed instances, plus feasibility (every task covered, no overlaps), never a specific assignment (D10). Every instance fits the free limit.
 
@@ -57,54 +57,48 @@ Start only after Model 1 is done and tested.
 
 ## Step 4: Solver telemetry (the most important step)
 
-- A Gurobi callback that emits, during the solve: MIP gap, incumbent, best bound, the count of improved incumbents (computed by comparing values, D6), node count, simplex iterations, and elapsed time.
-- Export through OpenTelemetry metrics over OTLP/HTTP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and to plain stdout when it isn't (D16). Metric names, units and attributes follow D6. Per-run values, including the incumbent-improvement count, use observable gauges for active runs, labelled with a `run_id` that is unique across processes (D21).
+- A Gurobi callback that emits, during the solve: MIP gap, incumbent, best bound, the count of improved incumbents (computed by comparing values, D6), node count, simplex iterations, elapsed time and work units.
+- Export OpenTelemetry metrics over OTLP/HTTP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. When it isn't, create no exporter, so nothing is sent anywhere (D16). Metric names, units and attributes follow D6. Per-run values, including the incumbent-improvement count, use observable gauges for active runs, labelled with a `run_id` that is unique across processes (D21).
 - Check that the final emitted values equal the model's final `ObjVal`, `ObjBound` and `NodeCount` (lens 12). Write a Gurobi log (`LogFile`) for instrumented runs, for the walkthrough below.
 - README: the gap-and-bound explainer, written to be understood cold in six months. It must explain that a bound that won't move and an incumbent that won't improve are different problems.
 - `docs/reading-the-log.md`: a real log from this repo, annotated (D13).
 
-**Done when:** tests run with an in-memory metric reader and no collector, and the stdout and OpenTelemetry paths report the same values.
+**Done when:** tests read the metrics through an in-memory reader with no collector, and a run with the variable unset creates no exporter.
 
-## Step 5: Operational edges, each with a test
+## Step 5: Observability stack
 
-- **Early stop:** stop after a given effort and return the best solution plus its gap. "Feasible but not proven optimal" is a normal result the caller can distinguish, not an error. Tests use an abstract effort limit, which maps to `WorkLimit` on Gurobi (D7, D5), and assert the shared result status "limit reached, feasible", not a backend's own status code. Because default instances solve at the root (D4), these tests also switch on one solve option that exposes the search: `Presolve=0, Cuts=0` on Gurobi, and presolve off with `mip_heuristic_effort=0` on HiGHS, as in the D5 proof of concept.
+- `compose.yaml` with one `grafana/otel-lgtm` service (D16). The app keeps running on the host.
+- A Grafana dashboard provisioned as JSON: incumbent and bound on one panel, and gap, nodes and incumbent improvements on others, filtered by `run_id`. Queries use Prometheus's renamed metrics, such as `groundops_solver_gap_ratio`.
+- Traces with one span per phase (instance generation, model build, solve), carrying `run_id`. Step 6 adds a span for IIS. Gurobi's log lines go to Loki through the `MESSAGE` callback.
+
+**Done when:** one `docker compose up` plus one CLI run shows the run's curve in Grafana, its spans in Tempo and its log lines in Loki. `uv run pytest` still passes with no Docker.
+
+## Step 6: Operational edges, each with a test
+
+- **Early stop:** stop after a given effort and return the best solution plus its gap. "Feasible but not proven optimal" is a normal result the caller can distinguish, not an error. Tests use `WorkLimit` (D7) and assert the result status "limit reached, feasible". Because default instances solve at the root (D4), these tests also switch on one solve option that exposes the search: `Presolve=0, Cuts=0`.
 - **Warm start:** re-solve a perturbed instance (one task moves) using the previous solution as a `Start`. Report the difference in work units (Gurobi's deterministic measure of solver effort, used instead of seconds) against a cold start across seeds, honestly, even if it's "no measurable gain" (D8).
 - **Infeasibility diagnosis:** compute an IIS on an infeasible instance and report the conflicting constraints readably (D9).
 - **Determinism:** pin `Seed` and `Threads`. Document that Gurobi's results depend on the thread count, and which settings make a run reproducible (D7).
 
 **Done when:** each of the four edges has a test: the early stop returns "limit reached, feasible" with a non-zero gap; the warm-start comparison runs and reports its numbers; the IIS names the conflicting constraints; two runs with the same `Seed` and `Threads` give the same node count.
 
-## Step 6: Solver-agnostic fallback
-
-- One thin `Protocol` with two implementations: Gurobi and HiGHS (D5).
-- A capability one backend lacks, such as IIS, is reported as unavailable in the result.
-- The effort limit maps to `mip_max_nodes` on HiGHS.
-
-**Done when:** the same test suite passes on both backends, except that the IIS test asserts "unavailable" on HiGHS. The suite then still runs if the Gurobi licence bundled with gurobipy is missing or expired.
-
 ## Step 7: Tests
 
-The required tests are the "Done when" items of Steps 2 to 6: golden objectives, structural feasibility, the early stop returning feasible-but-not-optimal with a non-zero gap, and an IIS naming the right constraints. On top of those, everything passes on the free licence with no collector running.
+The required tests are the "Done when" items of Steps 2 to 6: golden objectives, structural feasibility, the early stop returning feasible-but-not-optimal with a non-zero gap, the warm-start comparison, an IIS naming the right constraints, and a reproducibility check.
 
-## Step 8: Observability stack
+**Done when:** `uv run pytest` passes all of them on the free licence, with no collector running.
 
-- `compose.yaml` with one `grafana/otel-lgtm` service (D16). The app keeps running on the host.
-- A Grafana dashboard provisioned as JSON: incumbent and bound on one panel, and gap, nodes and incumbent improvements on others, filtered by `run_id`. Queries use Prometheus's renamed metrics, such as `groundops_solver_gap_ratio`.
-- Traces with one span per phase (instance generation, model build, solve, IIS), carrying `run_id`. Gurobi's log lines go to Loki through the `MESSAGE` callback.
-
-**Done when:** one `docker compose up` plus one CLI run shows the run's curve in Grafana, its spans in Tempo and its log lines in Loki. `uv run pytest` still passes with no Docker.
-
-## Step 9: API with live progress
+## Step 8: API with live progress
 
 - FastAPI under `/api`, bound to `127.0.0.1` (D17): `POST /api/runs`, `GET /api/runs/{id}`, `GET /api/runs/{id}/events` (SSE, D18) and `POST /api/runs/{id}/cancel`.
-- `POST /api/runs` takes the model, instance size, seed, backend, whether to expose the search (D4), and an optional effort limit. An instance over the free-licence size is rejected before it's built. Two workers; when both are busy it returns 429.
-- The result is the shared result type from Step 6. Each SSE `progress` event carries elapsed time, incumbent, bound and gap, plus nodes and iterations where the backend has them (D6). A final `done` event carries the status.
-- One Gurobi environment per run, created and freed under one lock (D17). Cancel calls `terminate()` on Gurobi and the MIP interrupt callback on HiGHS, and the result reports `interrupted` with the best solution so far.
+- `POST /api/runs` takes the model, instance size, seed, whether to expose the search (D4), and an optional effort limit. An instance over the free-licence size is rejected before it's built. Two workers; when both are busy it returns 429.
+- The result is the same result type the models return (Step 2). Each SSE `progress` event carries elapsed time, incumbent, bound, gap, nodes and iterations (D6). A final `done` event carries the status.
+- One Gurobi environment per run, created and freed under one lock (D17). Cancel calls `terminate()`, and the result reports `interrupted` with the best solution so far.
 - A missing run returns 404 before any stream starts. A reconnecting client resumes from `Last-Event-ID`.
 
 **Done when:** `TestClient` tests cover every endpoint, including reading the SSE stream until `done`, cancelling, and a 404 for a missing run.
 
-## Step 10: UI
+## Step 9: UI
 
 - `ui/`: React, Vite and TypeScript (D19), with types generated from the OpenAPI schema (D20).
 - Three pages: New run; Run view (live gap, incumbent and bound from SSE, Cancel, a link to Grafana); Result (a Gantt chart for Model 1, demand against staffing for Model 2, the IIS highlighted when infeasible).

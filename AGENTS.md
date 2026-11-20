@@ -1,6 +1,6 @@
 # Agent instructions: gurobi-ground-ops
 
-A small public repo for learning Gurobi (MIP solver) on airport ground-operations problems: handler→task assignment and shift-coverage set covering. The models are textbook. The real deliverable is what surrounds the solve: solver telemetry, deterministic tests, effort limits, warm starts and infeasibility diagnosis. Optional layers sit on top of the core library: an LGTM observability stack in Docker Compose, a FastAPI service with SSE progress, and a React UI. The core never depends on them.
+A small public repo for learning Gurobi (MIP solver) on airport ground-operations problems: handler→task assignment and shift-coverage set covering. The models are textbook. The real deliverable is what surrounds the solve: solver telemetry, deterministic tests, effort limits, warm starts and infeasibility diagnosis. The repo has four parts: the core library (models, solve, telemetry), an LGTM observability stack in Docker Compose, a FastAPI service with SSE progress, and a React UI. The core library never imports the API or UI, and its tests need none of the other parts.
 
 The owner is a backend/platform engineer, **not an optimisation modeller**. Nothing in the repo may suggest otherwise.
 
@@ -11,7 +11,7 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 - **No performance claims or benchmark numbers that haven't been measured.** Any timing reported must come from a real run, with the machine and solver settings stated.
 - Never claim tests pass without running them and showing the real output.
 - Every instance must solve within the **free pip-installed gurobipy licence size limit**, so `uv sync && uv run pytest` works with no licence. If an instance doesn't fit, shrink it. Nothing may require a paid or academic licence.
-- All tests must pass with no OpenTelemetry collector running; telemetry falls back to stdout. `uv run pytest` must need no Docker, no Node and no browser.
+- All tests must pass with no OpenTelemetry collector running: they read metrics through an in-memory reader. With `OTEL_EXPORTER_OTLP_ENDPOINT` unset, no exporter is created and nothing is exported; there's no stdout fallback. `uv run pytest` must need no Docker, no Node and no browser.
 - Call `model.update()` before reading model size (`NumVars`, `NumConstrs`) or calling `copy()` or `relax()`. gurobipy applies changes lazily, so before `update()` the size reads 0 and a copy or relaxation is missing the pending constraints.
 
 ## Do NOT build
@@ -21,7 +21,7 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 - No Kubernetes, CI/CD or cloud deployment (single developer, local only).
 - No WebSockets. Progress is pushed over SSE; everything else is plain requests.
 - No notebooks, and no Sudoku, N-queens or puzzle demos.
-- No models beyond the two above.
+- No models beyond the two above, and no second solver: Gurobi only.
 
 ## Conventions
 
@@ -67,16 +67,15 @@ If you think something will be needed later, say so in your reply. Don't build i
 ### SOLID, applied lightly
 
 - **Single responsibility:** each module and function has one reason to change. Instance generation, model building, solving, telemetry and reporting live in separate modules. A model builder doesn't print or emit metrics, and a reporter doesn't solve.
-- **Open/closed** applies only to the solver backend: one thin `Protocol` with exactly two implementations (Gurobi plus one open-source fallback). Swapping backends must not require editing the models. Anywhere else, one implementation means a concrete class, not a `Protocol`, and no extension points.
-- **Substitution:** both backends honour the same contract: the same result type, the same status meanings, and the same behaviour on time limit and infeasibility. A capability only one backend has, such as IIS, is reported as unavailable in the result, so a caller never branches on which backend it got.
-- **Interface segregation:** a `Protocol` contains only the methods its callers actually use.
-- **Dependency inversion:** collaborators such as the backend and the telemetry sink are passed in as arguments, not constructed inside the function that uses them. Prefer composition over inheritance: no base classes, no inheritance hierarchies.
+- **Open/closed:** there are no extension points. Gurobi is the only solver, so there's no solver abstraction or `Protocol`; one implementation means a concrete class.
+- **Interface segregation:** functions take only the data they use, not whole objects "just in case".
+- **Dependency inversion:** collaborators such as the telemetry sink are passed in as arguments, not constructed inside the function that uses them. Prefer composition over inheritance: no base classes, no inheritance hierarchies.
 
 ### Reuse without duplicate abstractions
 
 - Before writing a helper, search the repo for an existing one and use it.
 - **Rule of three:** extract shared code when the third occurrence appears. With only two, keep both inline even if they look similar.
-- Give each domain concept one type (one task type, one solve-result type) and share it across models and backends. No parallel types, and no wrappers that only mirror a type or forward calls.
+- Give each domain concept one type (one task type, one solve-result type) and share it across both models. No parallel types, and no wrappers that only mirror a type or forward calls.
 
 ### Tests
 
@@ -84,7 +83,7 @@ If you think something will be needed later, say so in your reply. Don't build i
 - Assert on behaviour, not structure: what the solution does (every task covered exactly once, no handler with overlapping tasks, objective equal to the golden value), not the model's internals (number of variables, constraint names). The exception is when the internals are the behaviour, such as the constraint names in an IIS.
 - Test names describe behaviour: `test_effort_limit_returns_feasible_with_nonzero_gap`, not `test_solve_2`.
 - Test at the right level: a pure function gets a unit test, and a solve gets an integration test. Don't solve a MIP to test a formatting function.
-- Tests are deterministic: fixed seeds for instance generation, pinned solver `Seed` and `Threads`, no wall-clock assertions, no dependence on test order or network. A test that needs a solve stopped early uses an effort limit (`WorkLimit` on Gurobi, `mip_max_nodes` on HiGHS), not `TimeLimit`; Gurobi documents wall-clock limits as non-deterministic. Leave `ConcurrentMIP` off (the default), keep `Method` at 0, 1, 2 or 4, and build the model in a fixed order. ([Gurobi: Is Gurobi deterministic?](https://support.gurobi.com/hc/en-us/articles/360031636051))
+- Tests are deterministic: fixed seeds for instance generation, pinned solver `Seed` and `Threads`, no wall-clock assertions, no dependence on test order or network. A test that needs a solve stopped early uses `WorkLimit`, not `TimeLimit`; Gurobi documents wall-clock limits as non-deterministic. Leave `ConcurrentMIP` off (the default), keep `Method` at 0, 1, 2 or 4, and build the model in a fixed order. ([Gurobi: Is Gurobi deterministic?](https://support.gurobi.com/hc/en-us/articles/360031636051))
 - Use `pytest.mark.parametrize` for repetitive cases instead of copy-pasted tests.
 
 ### Comments
