@@ -1,6 +1,6 @@
 # Learning Gurobi on ground-operations problems
 
-I'm a backend/platform engineer picking up Gurobi — I'm not an optimisation modeller. The models here are small and textbook, chosen because airport ground operations has the clearest real-world assignment and covering problems. The part I care about is what surrounds the solve: telemetry, deterministic tests, time limits, warm starts, infeasibility diagnosis.
+I'm a backend/platform engineer picking up Gurobi — I'm not an optimisation modeller. The models here are small and textbook, chosen because airport ground operations has the clearest real-world assignment and covering problems. The part I care about is what surrounds the solve: telemetry, deterministic tests, effort limits, warm starts, infeasibility diagnosis.
 
 > **Status: all 9 plan steps done:** both models with their CLI commands, solver telemetry, the observability stack, the operational edges (early stop, warm start, infeasibility diagnosis, reproducibility), the required test set, the HTTP API with live progress, and the UI. [docs/plan.md](docs/plan.md) records what each step had to do to count as done.
 
@@ -18,6 +18,20 @@ The difference between them is the **gap**. When the gap closes, the solver has 
 - **Watch a solve:** gap, incumbent and bound update live, and you can cancel at any point and keep the best plan found so far.
 - **Inspect the answer:** a timeline per person shows their tasks and highlights the overtime, so you can judge whether the schedule makes operational sense.
 - **Diagnose infeasibility:** when no schedule is possible, it shows *which* tasks and people clash, instead of just failing.
+
+## Quick start
+
+With [uv](https://docs.astral.sh/uv/), [Node](https://nodejs.org/) and [Docker](https://docs.docker.com/get-started/get-docker/) (Engine 25 or later) installed and Docker running:
+
+```sh
+scripts/setup.sh   # Python and its packages, the UI's packages, the grafana/otel-lgtm image
+scripts/start.sh   # the observability stack, a fresh UI build, the app with telemetry on; opens the UI
+scripts/stop.sh    # the app and the stack
+```
+
+`start.sh` waits until the stack is healthy, then opens http://127.0.0.1:8000 in your browser; Grafana is at http://localhost:3000. Ctrl-C stops the app and leaves the stack running, so the runs stay visible in Grafana. `stop.sh` stops both, from any terminal; the stack's telemetry goes with it. The scripts are bash, for macOS and Linux. From a fresh clone with the stack stopped, the browser opened 25 s after `start.sh` began ([D24](docs/design-decisions.md#24-setup-and-start-scripts)).
+
+[How to run](#how-to-run) runs each part on its own.
 
 ## Terms used below
 
@@ -58,19 +72,7 @@ The core library never imports the API or UI. `uv run pytest` needs no Docker, n
 
 ## How to run
 
-**Everything at once.** With [uv](https://docs.astral.sh/uv/), [Node](https://nodejs.org/) and [Docker](https://docs.docker.com/get-started/get-docker/) (Engine 25 or later) installed and Docker running:
-
-```sh
-scripts/setup.sh   # Python and its packages, the UI's packages, the grafana/otel-lgtm image
-scripts/start.sh   # the observability stack, a fresh UI build, the app with telemetry on; opens the UI
-scripts/stop.sh    # the app and the stack
-```
-
-`start.sh` waits until the stack is healthy, then opens http://127.0.0.1:8000 in your browser; Grafana is at http://localhost:3000. Ctrl-C stops the app and leaves the stack running, so the runs stay visible in Grafana. `stop.sh` stops both, from any terminal; the stack's telemetry goes with it. The scripts are bash, for macOS and Linux. Measured on the machine in [docs/experiments.md](docs/experiments.md), from a fresh clone with the stack stopped, the browser opened 25 s after `start.sh` began.
-
-The rest of this section runs each part on its own.
-
-You need [uv](https://docs.astral.sh/uv/). It installs the right Python (3.12) and all dependencies itself. No Gurobi licence file is needed: the `gurobipy` package brings its own free licence.
+The core needs only [uv](https://docs.astral.sh/uv/). It installs the right Python (3.12) and all dependencies itself. No Gurobi licence file is needed: the `gurobipy` package brings its own free licence.
 
 ```sh
 uv sync
@@ -96,9 +98,7 @@ H5 shift 07:00-13:00: T8 07:35-07:45, T5 11:08-11:27
 
 `--tasks` must be even (two baggage tasks per turnaround). H2 does T2 entirely after its shift ends. That's valid: the objective counts only minutes outside the shift, not how far outside, so H2 and H4 (also 9 minutes) tie. An objective that also penalised calling someone back in, or travel, would be a different model.
 
-Up to 48 tasks fit the free licence for every seed tried (20 seeds per size); from 50 on, some seeds don't, and the command says so instead of solving.
-
-Both commands take `--log FILE` to write Gurobi's log, and `--expose-search` to set `Presolve=0` and `Cuts=0` so the branch-and-bound search becomes visible.
+Up to 48 tasks fit the free licence for every seed tried (20 seeds per size); from 50 on, some seeds don't, and the command says so instead of solving ([measured](docs/experiments.md#what-fits-the-free-licence-d1)).
 
 Roster a seeded Model 2 day (48 half-hour slots, 111 shift patterns) and print demand against people on duty:
 
@@ -116,6 +116,8 @@ roster:
 slot   demand  on duty
 ...
 ```
+
+`solve` and `cover` both take `--log FILE` to append Gurobi's log to a file, and `--expose-search` to set `Presolve=0` and `Cuts=0` so the branch-and-bound search becomes visible.
 
 ### Telemetry
 
@@ -136,24 +138,24 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 uv run ground-ops solve --task
 | `groundops.solver.elapsed` | seconds | wall-clock time |
 | `groundops.solver.work` | work units | Gurobi's deterministic effort measure |
 
-Each point carries `run_id` and `model` (`assignment` or `coverage`) attributes. Prometheus renames them on ingestion: dots become underscores and the unit becomes a suffix, so `groundops.solver.gap` is queried as `groundops_solver_gap_ratio`. A run's last values come from the model's final attributes rather than the last callback, which can fire before the final bound is known.
+Each point carries `run_id` and `model` (`assignment` or `coverage`) attributes. Prometheus renames them on ingestion: dots become underscores and a real unit becomes a suffix, so `groundops.solver.gap` is queried as `groundops_solver_gap_ratio`; units in braces add none, so `groundops.solver.bound` is `groundops_solver_bound`. A run's last values come from the model's final attributes rather than the last callback, which can fire before the final bound is known.
 
 ### Watching a solve in Grafana
 
 `compose.yaml` runs one `grafana/otel-lgtm` container: an OpenTelemetry Collector with Prometheus (metrics), Tempo (traces), Loki (logs) and Grafana. It needs Docker; the app itself still runs on your machine.
 
 ```sh
-docker compose up -d
+docker compose up --wait
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 uv run ground-ops solve --tasks 40 --seed 1 --expose-search
 ```
 
 Open Grafana at http://localhost:3000 (if it asks you to log in, the image's default user is `admin` with password `admin`), go to the **ground-ops: solver progress** dashboard, and pick the `run_id` the command printed. It shows incumbent against bound, the gap, nodes, simplex iterations, work units, and Gurobi's own log lines for that run. Each run is also a trace in Tempo, with one span per phase (generate instance, build model, solve); Tempo's search can take tens of seconds to find a new trace. The stack keeps data only while its container lives.
 
-If the endpoint is set but nothing is listening, the run still completes, but the result appears only after the exporters give up retrying: a 10-task solve took about 20 s on the machine in [docs/experiments.md](docs/experiments.md), against about 2 s with `OTEL_EXPORTER_OTLP_TIMEOUT=1` (the SDK's default is 10 s). Unset `OTEL_EXPORTER_OTLP_ENDPOINT` when the stack isn't running.
+If the endpoint is set but nothing is listening, the run still completes, but the result appears only after the exporters give up retrying: a 10-task solve took a median of 19.7 s, against 1.2 s with `OTEL_EXPORTER_OTLP_TIMEOUT=1` (the SDK's default is 10 s) and 0.2 s with the endpoint unset ([measured](docs/experiments.md#exporting-to-an-endpoint-with-nothing-listening)). Unset `OTEL_EXPORTER_OTLP_ENDPOINT` when the stack isn't running.
 
 ### Integration tests
 
-`uv run pytest` needs no Docker. The integration tests start their own `grafana/otel-lgtm` container, run a real solve through the real exporter, and check that the metrics, logs, trace and dashboard all arrive (about 40 seconds):
+`uv run pytest` needs no Docker. The integration tests start their own `grafana/otel-lgtm` container, run a real solve through the real exporter, and check that the metrics, logs, trace and dashboard all arrive:
 
 ```sh
 uv run pytest -m integration
@@ -315,13 +317,13 @@ With default settings the search is usually invisible. Across 20 seeds each, all
 - **Persist anything.** There's no database, job queue, authentication or multi-user state. Runs are lost on restart.
 - **Support other solvers.** It's about Gurobi; there's no solver abstraction.
 - **Deploy anywhere.** No Kubernetes, no CI/CD, and no container for the app itself.
-- **Use real data or names.** All instances are synthetic, with task durations based on a published turnaround dataset.
+- **Use real data or names.** All instances are synthetic, with task durations based on a published turnaround dataset ([where the numbers come from](docs/domain.md)).
 
 ## Docs
 
-Working on the repo? Start with [AGENTS.md](AGENTS.md) for the rules, then [docs/plan.md](docs/plan.md) for what to build.
+Working on the repo? Start with [AGENTS.md](AGENTS.md) for the rules, then [docs/plan.md](docs/plan.md) for what was built and why.
 
-- [Plan](docs/plan.md): what gets built, step by step.
+- [Plan](docs/plan.md): what was built, step by step, and what each step had to do to count as done.
 - [Domain](docs/domain.md): the glossary, where the numbers come from, and what's simplified.
 - [Reading a Gurobi log](docs/reading-the-log.md): two real logs from this repo, annotated line by line.
 - [Experiments](docs/experiments.md): the measurements behind the numbers quoted here, with their scripts and machine.

@@ -197,3 +197,41 @@ Model 1, default settings; constraints include the cover constraints
 ```
 
 **Finding:** on all 15 instances the clique form's LP bound equals the optimum, while the pairwise LP bound is below it on all 12 instances with a non-zero optimum, and is 0 on half of those. The clique form needs 32% to 70% as many constraints. Both forms reach the same optimum. This held on every instance tried, but isn't proven in general.
+
+## What fits the free licence (D1)
+
+How many Model 1 instances of each size fit the free licence's 2,000 variables and 2,000 constraints, with the default number of handlers. The script counts the model's size without building it, so it uses no solver. Measured on 2026-11-21.
+
+```sh
+uv run python experiments/licence_fit.py
+```
+
+```
+Model 1, default handlers, 20 seeds per size, limit 2000 of each
+40 tasks: 20/20 fit; largest variables or constraints 1130
+42 tasks: 20/20 fit; largest variables or constraints 1638
+44 tasks: 20/20 fit; largest variables or constraints 1820
+46 tasks: 20/20 fit; largest variables or constraints 1858
+48 tasks: 20/20 fit; largest variables or constraints 1944
+50 tasks: 19/20 fit; largest variables or constraints 2150
+52 tasks: 17/20 fit; largest variables or constraints 2224
+54 tasks: 17/20 fit; largest variables or constraints 2346
+56 tasks: 17/20 fit; largest variables or constraints 2838
+58 tasks: 15/20 fit; largest variables or constraints 2853
+60 tasks: 13/20 fit; largest variables or constraints 3154
+```
+
+**Finding:** every seed fits up to 48 tasks; from 50, some don't, and `ground-ops solve` refuses those with a message instead of solving.
+
+## Exporting to an endpoint with nothing listening
+
+`uv run ground-ops solve --tasks 10` with `OTEL_EXPORTER_OTLP_ENDPOINT` set to a port where nothing listens, three runs each, wall-clock from start to exit, on 2026-11-21:
+
+| Setting | Runs | Median |
+| --- | --- | --- |
+| SDK default timeout (10 s) | 19.7, 19.7, 20.7 s | 19.7 s |
+| `OTEL_EXPORTER_OTLP_TIMEOUT=1` | 1.9, 0.2, 1.2 s | 1.2 s |
+| Endpoint not set | 0.2, 0.2, 0.2 s | 0.2 s |
+
+**Finding:** the solve itself is quick; the wait is the exporters retrying at shutdown. Unset the endpoint when the stack isn't running, or lower the timeout.
+
