@@ -7,6 +7,11 @@ services:
       - "3000:3000" # Grafana
       - "4318:4318" # OTLP over HTTP
       - "9090:9090" # Prometheus, for querying metrics directly
+    # The image checks its health every 30 s, so `up --wait` would wait 30 s for the first check; during the start
+    # period it checks every second instead. start_interval needs Docker Engine 25.0 or later.
+    healthcheck:
+      start_period: 2m
+      start_interval: 1s
     volumes:
       - ./grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/ground-ops.yaml:ro
       # A directory, not single files: editors that save by replacing a file would leave a file mount stale.

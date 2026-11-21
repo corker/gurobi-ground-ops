@@ -35,6 +35,7 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 | 21 | Observability, API and UI | Run identity in telemetry | A `run_id` unique across processes, as a metric attribute on observable gauges for active runs only, with a raised cap | High (85%) |
 | 22 | Observability, API and UI | TypeScript quality checks | `tsc` with `strict: true`, oxlint with type-aware rules, Prettier, Vitest; one `npm run check` | High (85%) |
 | 23 | Licence and models | Data types | Frozen, strict Pydantic models everywhere, core and API (decided) | High (85%) |
+| 24 | Observability, API and UI | Setup and start scripts | Two bash scripts in `scripts/`; a faster healthcheck so `docker compose up --wait` returns when the stack is ready | High (90%) |
 
 ## 1. gurobipy version and licence
 
@@ -425,6 +426,26 @@ Measured with Pydantic 2.14.4: in its default (lax) mode, `Task(id="3", start="3
 **Recommendation.** Pydantic everywhere, with one shared strict, frozen config (decided by the owner). After the change the full check passed unchanged (161 tests), and the 40-task exposed solve still took 32,424 nodes and 3.170548 work units.
 
 **Confidence: High (85%)** that it works as described: measured and tested here. The trade-off against dataclasses was close; the choice ties the core's types to Pydantic's major versions.
+
+## 24. Setup and start scripts
+
+One command to install everything (Python packages, UI packages, the `grafana/otel-lgtm` image) and one to start everything (the stack, a UI build, the app with telemetry) and open the UI. Single developer, macOS, local only.
+
+| Option | Needs | Pros | Cons |
+| --- | --- | --- | --- |
+| **Two bash scripts, `scripts/setup.sh` and `scripts/start.sh`** | bash (macOS ships 3.2), curl | Nothing to install; plain commands anyone can read; with `exec`, Ctrl-C reaches the server with no shell left in between | No native Windows (WSL works) |
+| Makefile targets | `make`, on macOS from the Xcode command line tools | Familiar `make setup` | Tab-sensitive syntax; a long-running foreground server and a background browser-opener are awkward in recipes |
+| `just` or Task (`justfile`, `Taskfile.yml`) | Another tool to install | Nicer syntax than make | A dependency to run the dependency installer |
+| `ground-ops setup` and `ground-ops start` subcommands | uv | Cross-platform Python | Puts Docker and npm orchestration in the package, which only solves and serves (single responsibility); setup can't install uv itself anyway |
+| Root `package.json` scripts | Node | `npm run start` | Makes Node the entry point for a Python project; Node is meant only for the UI |
+| A Procfile with honcho or overmind | Another tool | Runs several processes with merged logs | There is only one long-running process on the host; the stack runs in Docker |
+| The app in Docker Compose too | Docker | One `docker compose up` | Ruled out by AGENTS.md: no container for the app |
+
+**Readiness.** `docker compose up --wait` waits until services are "running|healthy" and implies detached mode ([compose up](https://docs.docker.com/reference/cli/docker/compose/up/)). The image's own healthcheck checks Grafana, Loki, Tempo, Prometheus and the collector, but only every 30 s, so `--wait` took 31 and 32 s from cold. A Compose `healthcheck` with `start_period: 2m` and `start_interval: 1s` keeps the image's test and interval but checks every second while starting: 8, 12 and 7 s over three cold starts. Compose "can override the values set in the Dockerfile" ([Compose spec: healthcheck](https://github.com/compose-spec/compose-spec/blob/main/workload_spec.md)); the merged container config kept the image's test command and 30 s interval. `start_interval` "requires Docker Engine version 25.0 or later" ([Dockerfile: HEALTHCHECK](https://docs.docker.com/reference/dockerfile/)).
+
+**Recommendation.** The two bash scripts. `setup.sh` checks for uv, npm and a running Docker, then runs `uv sync`, `npm ci` (installs exactly the lockfile) and `docker compose pull`. `start.sh` refuses to start if port 8000 is taken or the UI's packages are missing, runs `docker compose up --wait`, builds the UI, opens the browser once the app answers, and `exec`s `ground-ops serve` with `OTEL_EXPORTER_OTLP_ENDPOINT` set. The stack keeps running after Ctrl-C, so finished runs stay in Grafana.
+
+**Confidence: High (90%).** Measured on 2026-11-21 on the machine in [experiments.md](experiments.md), under macOS's bash 3.2, from a fresh clone: setup succeeded; with the stack stopped, `start.sh` opened the browser after 25 s; a run was exported and its `run_id` reached Prometheus; a second `start.sh` was refused; Ctrl-C stopped the app; `start.sh` before setup said to run setup; setup with Docker unreachable (`DOCKER_HOST` pointed at a missing socket) or uv not on the `PATH` named what was missing. ShellCheck reports nothing. Not tested: Linux (`xdg-open`), and setup on a machine with nothing cached (the fresh-clone setup took 4 s because uv, npm and Docker had everything cached).
 
 ## Know about, don't build
 

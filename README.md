@@ -52,11 +52,22 @@ The difference between them is the **gap**. When the gap closes, the solver has 
 - **Telemetry:** OpenTelemetry metrics, plus traces and logs. They go over OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set; when it isn't, nothing is exported. The opt-in integration tests check all three against a real `grafana/otel-lgtm` container.
 - **Observability stack:** one [`grafana/otel-lgtm`](https://github.com/grafana/docker-otel-lgtm) container in Docker Compose, with a provisioned dashboard. The image is intended for development, demo and testing.
 - **API:** FastAPI on `127.0.0.1`. Start a run, stream its progress over server-sent events, cancel it, fetch the result. Runs live in memory.
-- **UI:** React, Vite and TypeScript, in three pages: new run, live run, result.
+- **UI:** React, Vite and TypeScript, in two pages: a new-run form, and a run page that shows live progress and then the result.
 
 The core library never imports the API or UI. `uv run pytest` needs no Docker, no Node and no browser; the UI has its own tests in `ui/`.
 
 ## How to run
+
+**Everything at once.** With [uv](https://docs.astral.sh/uv/), [Node](https://nodejs.org/) and [Docker](https://docs.docker.com/get-started/get-docker/) (Engine 25 or later) installed and Docker running:
+
+```sh
+scripts/setup.sh   # Python and its packages, the UI's packages, the grafana/otel-lgtm image
+scripts/start.sh   # the observability stack, a fresh UI build, the app with telemetry on; opens the UI
+```
+
+`start.sh` waits until the stack is healthy, then opens http://127.0.0.1:8000 in your browser; Grafana is at http://localhost:3000. Ctrl-C stops the app and leaves the stack running, so the runs stay visible in Grafana; `docker compose down` stops it. Both scripts are bash, for macOS and Linux. Measured on the machine in [docs/experiments.md](docs/experiments.md), from a fresh clone with the stack stopped, the browser opened 25 s after `start.sh` began.
+
+The rest of this section runs each part on its own.
 
 You need [uv](https://docs.astral.sh/uv/). It installs the right Python (3.12) and all dependencies itself. No Gurobi licence file is needed: the `gurobipy` package brings its own free licence.
 
@@ -212,7 +223,7 @@ Read: tasks 0, 1 and 3 overlap pairwise, and two handlers can't cover three over
 The UI is a React app in `ui/`. It needs [Node](https://nodejs.org/) only to build it; `ground-ops serve` then serves the build together with the API:
 
 ```sh
-cd ui && npm install && npm run build && cd ..
+cd ui && npm ci && npm run build && cd ..
 uv run ground-ops serve
 ```
 
