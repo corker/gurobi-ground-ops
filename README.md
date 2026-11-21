@@ -63,9 +63,10 @@ The core library never imports the API or UI. `uv run pytest` needs no Docker, n
 ```sh
 scripts/setup.sh   # Python and its packages, the UI's packages, the grafana/otel-lgtm image
 scripts/start.sh   # the observability stack, a fresh UI build, the app with telemetry on; opens the UI
+scripts/stop.sh    # the app and the stack
 ```
 
-`start.sh` waits until the stack is healthy, then opens http://127.0.0.1:8000 in your browser; Grafana is at http://localhost:3000. Ctrl-C stops the app and leaves the stack running, so the runs stay visible in Grafana; `docker compose down` stops it. Both scripts are bash, for macOS and Linux. Measured on the machine in [docs/experiments.md](docs/experiments.md), from a fresh clone with the stack stopped, the browser opened 25 s after `start.sh` began.
+`start.sh` waits until the stack is healthy, then opens http://127.0.0.1:8000 in your browser; Grafana is at http://localhost:3000. Ctrl-C stops the app and leaves the stack running, so the runs stay visible in Grafana. `stop.sh` stops both, from any terminal; the stack's telemetry goes with it. The scripts are bash, for macOS and Linux. Measured on the machine in [docs/experiments.md](docs/experiments.md), from a fresh clone with the stack stopped, the browser opened 25 s after `start.sh` began.
 
 The rest of this section runs each part on its own.
 
