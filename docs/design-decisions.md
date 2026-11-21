@@ -31,9 +31,9 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 | 17 | Observability, API and UI | API | FastAPI under `/api` on `127.0.0.1`; one Gurobi environment per run; cancel through `terminate()` | High (90%) |
 | 18 | Observability, API and UI | Progress transport | SSE for progress; plain requests for everything else | High (85%) |
 | 19 | Observability, API and UI | UI library | React with Vite and TypeScript | Medium (75%) |
-| 20 | Observability, API and UI | UI serving and API types | Vite dev proxy while developing; FastAPI serves the built UI; types generated with openapi-typescript | Medium (80%) |
+| 20 | Observability, API and UI | UI serving and API types | Vite dev proxy while developing; FastAPI serves the built UI; types generated with openapi-typescript | High (85%) |
 | 21 | Observability, API and UI | Run identity in telemetry | A `run_id` unique across processes, as a metric attribute on observable gauges for active runs only, with a raised cap | High (85%) |
-| 22 | Observability, API and UI | TypeScript quality checks | `tsc` with `strict: true`, oxlint, Prettier, Vitest; one `npm run check` | Medium (70%) |
+| 22 | Observability, API and UI | TypeScript quality checks | `tsc` with `strict: true`, oxlint with type-aware rules, Prettier, Vitest; one `npm run check` | High (85%) |
 | 23 | Licence and models | Data types | Frozen, strict Pydantic models everywhere, core and API (decided) | High (85%) |
 
 ## 1. gurobipy version and licence
@@ -356,7 +356,9 @@ Measured: FastAPI served the built UI. A catch-all route returning `index.html` 
 
 **Recommendation.** The first option. The build output stays out of git. TypeScript types come from the OpenAPI schema; the SSE payload type is wired to the stream in one place in the UI.
 
-**Confidence: Medium (80%).** The serving part is measured (90%). The SSE payload type needing a hand-written link lowers the total.
+Built in Step 9. The events endpoint is annotated `Iterator[Progress | Finished]`, which makes FastAPI 0.165.0 document both payload types under the stream's `itemSchema` while still sending the `ServerSentEvent` wrappers it yields (a `cast` tells mypy). openapi-typescript 7.13.0 then generates `Progress` and `Finished`; `ui/src/api.ts` links each event name to its type, the one hand-written link. Two findings: openapi-typescript declares TypeScript `^5.x` as a peer, and with the template's TypeScript 7.0.2 it fails at startup, because TypeScript 7 has no JavaScript compiler API (`ts.factory` is undefined), so the UI uses TypeScript 5.9.3. And by default openapi-typescript treats any field with a default as required, which made the optional request fields required; `--default-non-nullable false` fixes it. A run started from the built UI against the real API, driven in Chrome by a one-off Playwright script (not kept in the repo), reached every page: optimal, limit reached, infeasible and a Model 2 roster; a 40-task run with the search exposed showed live progress and, cancelled from its page, ended as `interrupted`; loading a run's page by its URL worked. The run page's Grafana link was checked in Chrome against the Grafana in `grafana/otel-lgtm:0.41.1`: `/d/ground-ops-solver` without the slug redirected to the slugged URL, `from` and `to` in epoch milliseconds were applied as the time range, and `var-run_id` selected the run. Grafana's docs state the `var-` prefix and that `from` and `to` take "ms, epoch, or relative time" ([URL variables](https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/create-dashboard-url-variables/)); the slug-less form isn't documented there, only observed.
+
+**Confidence: High (85%).** Measured end to end. The TypeScript 5 pin lasts until openapi-typescript supports TypeScript 7.
 
 ## 21. Run identity in telemetry
 
@@ -390,9 +392,24 @@ The UI needs the same kind of enforced check as the Python side (`ruff`, `mypy -
 | Formatting | Prettier 3.10.1; oxfmt 0.79.0 (pre-1.0); Biome 2.6.8 | Prettier |
 | Tests and coverage | Vitest 5.1.1 with Testing Library; `@vitest/coverage-v8` 5.1.1 | Vitest; coverage as a report, not a gate |
 
-**Recommendation.** One command, `npm run check` (`tsc -b && oxlint && prettier --check . && vitest run`), which must pass before a UI change is done, like the Python check.
+**Recommendation.** One command, `npm run check` (`types:check`, then `tsc -b`, `oxlint --type-aware`, `prettier --check .` and `vitest run`), which must pass before a UI change is done, like the Python check.
 
-**Confidence: Medium (70%).** `tsc` strict mode and Vitest are measured. Two things aren't: why oxlint reported nothing on the planted file, and whether ESLint's type-aware rules (for example, un-awaited promises) catch enough more to be worth a second tool. **To raise it:** at Step 9, plant one issue each tool should catch and compare oxlint with ESLint and typescript-eslint on the real UI code.
+Measured once in Step 9 (2026-11-21, Apple M4 Pro, Node 25.1.0), on a scratch copy of the real UI with one file of six planted bugs. ESLint and its plugins were installed only in that copy, so this table isn't reproducible from the repo:
+
+| Planted bug | oxlint 1.94.0, template config | oxlint `--type-aware` (oxlint-tsgolint 7.0.2007), six rules enabled | ESLint 10.15.0, typescript-eslint 8.73.0 `recommendedTypeChecked`, react-hooks 7.1.1 |
+| --- | --- | --- | --- |
+| Hook called conditionally | Yes | Yes | Yes |
+| Missing effect dependency | Yes | Yes | Yes |
+| Floating promise | No | Yes | Yes |
+| `await` of a non-promise | No | Yes | Yes |
+| Async function passed as `onClick` | No | Yes | Yes |
+| Unchecked `any` | No | Yes | Yes |
+
+On the real UI code, ESLint and the configured oxlint found the same two real bugs (an async `onSubmit` handler, and the stream's `done` callback returning a promise), both fixed; ESLint also flagged one async test helper without `await`. The template's oxlint has the type-aware rules but doesn't enable them, which is why it reported nothing on the D19 planted file.
+
+**Recommendation, revised.** oxlint only, run as `oxlint --type-aware` with `no-floating-promises`, `await-thenable`, `no-misused-promises`, `no-unsafe-assignment`, `no-unsafe-member-access` and `no-explicit-any` enabled. It matched ESLint on every planted bug, so a second linter adds nothing measured.
+
+**Confidence: High (85%).** Measured on six kinds of bug and the real code.
 
 ## 23. Data types
 

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,11 @@ def test_report_lists_each_handlers_tasks_in_time_order_with_overtime() -> None:
         "H0 shift 06:00-10:00: T2 05:00-05:20 (+20 overtime), T1 07:00-07:20, T0 10:00-10:15 (+15 overtime)",
         "H1 shift 06:00-10:00: no tasks",
     ]
+
+
+def test_report_header_says_handler_for_exactly_one() -> None:
+    one = INSTANCE.model_copy(update={"handlers": INSTANCE.handlers[:1]})
+    assert report(one, seed=4, result=RESULT).splitlines()[0] == "Model 1: 3 tasks, 1 handler, seed 4"
 
 
 def test_solve_command_prints_a_report_and_exits_cleanly(capsys: pytest.CaptureFixture[str]) -> None:
@@ -162,8 +168,28 @@ def test_a_negative_work_limit_is_reported_on_stderr(capsys: pytest.CaptureFixtu
     assert "work limit must be zero or more" in capsys.readouterr().err
 
 
-def test_serve_binds_the_api_to_localhost_only(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_serve_binds_the_api_and_the_ui_build_to_localhost_only(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    (tmp_path / "index.html").write_text("<div id=root></div>")
+    monkeypatch.setattr("ground_ops.cli.UI_BUILD", tmp_path)
     calls: list[dict[str, object]] = []
     monkeypatch.setattr("uvicorn.run", lambda _app, **options: calls.append(options))
     assert main(["serve", "--port", "8123"]) == 0
     assert calls == [{"host": "127.0.0.1", "port": 8123}]
+    assert "serving the UI at http://127.0.0.1:8123" in capsys.readouterr().err
+
+
+def test_serve_without_a_ui_build_says_it_serves_the_api_only(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    monkeypatch.setattr("uvicorn.run", lambda _app, **_options: None)
+    monkeypatch.setattr("ground_ops.cli.UI_BUILD", tmp_path / "dist")
+    assert main(["serve"]) == 0
+    assert "serving the API only" in capsys.readouterr().err
+
+
+def test_openapi_prints_the_api_schema(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["openapi"]) == 0
+    schema = json.loads(capsys.readouterr().out)
+    assert "/api/runs/{run_id}/events" in schema["paths"]

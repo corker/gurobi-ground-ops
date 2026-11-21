@@ -74,13 +74,15 @@ class ProgressRecorder:
 
     def finish(self, model: gp.Model) -> None:
         """Record the final state from the model: the last MIP callback can run before the final bound and incumbent."""
+        # An infeasible model has no bound, and with no variables at all Gurobi refuses to report ObjBound.
+        bound = None if model.Status == GRB.INFEASIBLE else model.ObjBound
         self._record(
             Progress(
                 elapsed=model.Runtime,
                 work=model.Work,
                 incumbent=model.ObjVal if model.SolCount else None,
-                # Gurobi reports a missing bound as infinite: a solve stopped before the root relaxation, or infeasible.
-                bound=model.ObjBound if math.isfinite(model.ObjBound) else None,
+                # Before the root relaxation, Gurobi reports the bound as infinite.
+                bound=bound if bound is not None and math.isfinite(bound) else None,
                 nodes=int(model.NodeCount),
                 iterations=int(model.IterCount),
                 improvements=self._improvements,

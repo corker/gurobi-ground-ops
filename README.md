@@ -2,9 +2,9 @@
 
 I'm a backend/platform engineer picking up Gurobi — I'm not an optimisation modeller. The models here are small and textbook, chosen because airport ground operations has the clearest real-world assignment and covering problems. The part I care about is what surrounds the solve: telemetry, deterministic tests, time limits, warm starts, infeasibility diagnosis.
 
-> **Status: Steps 1 to 8 of 9 done:** project setup, both models with their CLI commands, solver telemetry, the observability stack, the operational edges (early stop, warm start, infeasibility diagnosis, reproducibility), the required test set, and the HTTP API with live progress. The UI (Step 9) is planned. Everything else below is planned. [docs/plan.md](docs/plan.md) says what gets built, in what order, and when each step counts as done. Sections lose their "planned" label as each step lands.
+> **Status: all 9 plan steps done:** both models with their CLI commands, solver telemetry, the observability stack, the operational edges (early stop, warm start, infeasibility diagnosis, reproducibility), the required test set, the HTTP API with live progress, and the UI. [docs/plan.md](docs/plan.md) records what each step had to do to count as done.
 
-## What it does (planned)
+## What it does
 
 At an airport, ground staff unload and load baggage between flights. Each task has a fixed start time, so someone has to decide **who does which task**, without anyone being in two places at once. Everyone has a shift, and any work outside it is **overtime**, which costs money. The first model (**Model 1**, task assignment) finds the schedule with the least overtime. The second (**Model 2**, shift coverage) answers a simpler question: **how many people to roster on each shift pattern** so there are enough on duty in every half hour of the day.
 
@@ -13,7 +13,7 @@ You describe the rules ("every task gets exactly one person", "nobody does two o
 - **The incumbent:** the best schedule found so far ("I have a plan with 55 minutes of overtime").
 - **The bound:** how good any schedule *could* possibly be ("I can prove nothing beats 35 minutes").
 
-The difference between them is the **gap**. When the gap closes, the solver has proven its plan is the best possible. Often it finds the best plan early and spends most of its time proving it. This repo is planned to let you watch that happen. The first two of these come from the API and UI (plan Steps 8 and 9):
+The difference between them is the **gap**. When the gap closes, the solver has proven its plan is the best possible. Often it finds the best plan early and spends most of its time proving it. This repo lets you watch that happen, in the UI:
 
 - **Watch a solve:** gap, incumbent and bound update live, and you can cancel at any point and keep the best plan found so far.
 - **Inspect the answer:** a timeline per person shows their tasks and highlights the overtime, so you can judge whether the schedule makes operational sense.
@@ -32,7 +32,7 @@ The difference between them is the **gap**. When the gap closes, the solver has 
 - **OTLP:** OpenTelemetry's protocol for sending metrics, traces and logs to a collector.
 - **SSE** (server-sent events): a standard way for a web server to push a stream of updates to a browser.
 
-## How it fits together (planned)
+## How it fits together
 
 ```
   browser (React UI) ──HTTP/SSE──▶ FastAPI (/api, 127.0.0.1)
@@ -161,7 +161,7 @@ curl -sN localhost:8000/api/runs/<id>/events
 | Endpoint | What it does |
 | --- | --- |
 | `POST /api/runs` | Starts a run: `model` (`assignment` or `coverage`), `tasks`, `handlers`, `seed`, `expose_search`, `work_limit`. Returns 202 with the run. An invalid request, or one too big for the free licence, is refused with 422 before anything is built. With two runs already going, it returns 429. |
-| `GET /api/runs/{id}` | The run: its instance, latest progress, and the result once it ends |
+| `GET /api/runs/{id}` | The run: its instance, latest progress, the result once it ends, its start and end times, and whether its telemetry is exported |
 | `GET /api/runs/{id}/events` | Server-sent events: `progress` at most every 0.2 s, a final `progress`, then `done` with the status. A reconnecting client sends `Last-Event-ID` and gets only the events after it. The stream closes after `done`; a browser `EventSource` reconnects to a closed stream by itself, so a client should call `close()` when it receives `done`. |
 | `POST /api/runs/{id}/cancel` | Asks the run to stop at the solver's next callback; the result is then `interrupted`, with the best schedule found so far. If the solve has already finished (or the run is computing an IIS), the result is unchanged. 409 if the run has already ended. |
 
@@ -207,7 +207,18 @@ Read: tasks 0, 1 and 3 overlap pairwise, and two handlers can't cover three over
 
 **Reproducibility.** Every solve pins `Threads=1` and `Seed=0`. Gurobi says it returns the same results for the same model and parameters on the same computer with the same Gurobi version ([Gurobi: determinism](https://support.gurobi.com/hc/en-us/articles/360031636051)); it doesn't promise the same search on another machine. A test solves the same instance twice and checks the node count, iterations and work units are identical. The thread count is a parameter like any other: measured on five seeds, four threads explored a different number of nodes from one thread on four of them, reached the same optimum, and repeated exactly when run again ([docs/experiments.md](docs/experiments.md#one-thread-against-four-d7)).
 
-This section grows as each plan step lands.
+### The UI
+
+The UI is a React app in `ui/`. It needs [Node](https://nodejs.org/) only to build it; `ground-ops serve` then serves the build together with the API:
+
+```sh
+cd ui && npm install && npm run build && cd ..
+uv run ground-ops serve
+```
+
+Open http://127.0.0.1:8000. **New run** starts a Model 1 or Model 2 run. The **run page** shows the incumbent, bound, gap and node count live, with a chart of incumbent against bound and a Cancel button. When the run ends, the same page shows the result: for Model 1, a timeline per handler with each task and the minutes of overtime marked; for Model 2, people on duty against demand per half hour, with the roster; for an infeasible run, the conflicting rules in plain words and the tasks involved on one time axis. With `OTEL_EXPORTER_OTLP_ENDPOINT` set, a run page links to the run in Grafana, filtered to its `run_id` and time window.
+
+To work on the UI, run `uv run ground-ops serve` and, in `ui/`, `npm run dev`: Vite serves the UI at http://127.0.0.1:5173 with hot reload and passes `/api` through to the API on port 8000. `npm run check` in `ui/` must pass before a UI change is done: it checks the generated API types are current, then runs `tsc` in strict mode, oxlint with type-aware rules, Prettier and Vitest. After an API change, `npm run types` regenerates `src/api.gen.ts` from the API's OpenAPI schema (`uv run ground-ops openapi`).
 
 ## Models
 

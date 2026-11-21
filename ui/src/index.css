@@ -1,0 +1,118 @@
+:root {
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background: #fff;
+  --task: #2b5c8a;
+  --overtime: #b3261e;
+  --shift: #dce7f2;
+  --bound: #6b4fa3;
+}
+
+body {
+  margin: 0;
+}
+
+header,
+main {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 0.75rem 1.5rem;
+}
+
+header a {
+  font-weight: 700;
+  color: inherit;
+}
+
+form label,
+fieldset label {
+  display: block;
+  margin: 0.5rem 0;
+}
+
+button {
+  font: inherit;
+  padding: 0.4rem 1rem;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content auto;
+  gap: 0.25rem 1rem;
+}
+
+dd {
+  margin: 0;
+}
+
+svg {
+  width: 100%;
+  height: auto;
+  font-size: 11px;
+}
+
+svg.wide {
+  min-width: 48rem;
+}
+
+svg.actual-size {
+  width: auto;
+  max-width: 100%;
+}
+
+[role='alert'] {
+  color: var(--overtime);
+}
+
+.grid {
+  stroke: #ccc;
+}
+.shift {
+  fill: var(--shift);
+  background: var(--shift);
+}
+.task {
+  fill: var(--task);
+}
+.overtime {
+  fill: var(--overtime);
+  color: var(--overtime);
+}
+.conflict {
+  fill: var(--overtime);
+}
+.incumbent {
+  fill: none;
+  stroke: var(--task);
+  stroke-width: 2;
+  color: var(--task);
+}
+.bound {
+  fill: none;
+  stroke: var(--bound);
+  stroke-width: 2;
+  color: var(--bound);
+}
+.on-duty {
+  fill: var(--task);
+  color: var(--task);
+}
+.demand {
+  fill: none;
+  stroke: var(--overtime);
+  stroke-width: 1.5;
+  color: var(--overtime);
+}
+figcaption span.incumbent,
+figcaption span.bound,
+figcaption span.overtime,
+figcaption span.on-duty,
+figcaption span.demand {
+  font-weight: 600;
+}
+
+figure {
+  margin: 1rem 0;
+  overflow-x: auto;
+}

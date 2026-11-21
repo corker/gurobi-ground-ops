@@ -106,7 +106,7 @@ Every neighbour focuses on the model, the data or the log after the fact. This r
 
 | Project | Ground-ops domain | Solver | Focus | Format | Licence |
 | --- | --- | --- | --- | --- | --- |
-| gurobi-ground-ops (this repo, planned) | Yes | Gurobi | Live telemetry, effort limits, warm starts, IIS, determinism | Tested Python package | MIT |
+| gurobi-ground-ops (this repo) | Yes | Gurobi | Live telemetry, effort limits, warm starts, IIS, determinism | Tested Python package | MIT |
 | RoyalSkye/AGH | Yes | CPLEX inside a learned LNS | Solving large instances faster | Research code | MIT |
 | spadrona dataset | Yes | None | Benchmark instances | Dataset | Apache-2.0 |
 | Gurobi workforce notebook | No (services industry) | Gurobi | Formulation | Notebook | Apache-2.0 |

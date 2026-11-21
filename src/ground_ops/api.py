@@ -8,9 +8,11 @@ import threading
 import time
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, nullcontext
-from typing import Annotated, Literal
+from pathlib import Path
+from typing import Annotated, Literal, cast
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -58,6 +60,9 @@ class RunView(BaseModel):
     progress: Progress | None
     result: Result | None
     error: str | None
+    started_at: float = Field(description="Unix time in seconds")
+    ended_at: float | None = Field(description="Unix time in seconds; null while running")
+    exported: bool = Field(description="Whether the run's telemetry is exported, so Grafana can show it")
 
 
 class Finished(BaseModel):
@@ -77,6 +82,8 @@ class Run(BaseModel):
     id: str
     model: ModelName
     instance: AssignmentInstance | CoverageInstance
+    exported: bool
+    started_at: float = Field(default_factory=time.time)
     stop: threading.Event = Field(default_factory=threading.Event)
     # Guards everything below; the solver thread notifies it whenever an event is added.
     changed: threading.Condition = Field(default_factory=threading.Condition)
@@ -85,6 +92,7 @@ class Run(BaseModel):
     sampled_at: float = float("-inf")
     result: Result | None = None
     error: str | None = None
+    ended_at: float | None = None
     done: bool = False
 
     def add_event(self, event: str, *, data: BaseModel) -> None:
@@ -102,6 +110,9 @@ class Run(BaseModel):
                 progress=self.progress,
                 result=self.result,
                 error=self.error,
+                started_at=self.started_at,
+                ended_at=self.ended_at,
+                exported=self.exported,
             )
 
 
@@ -144,12 +155,13 @@ def _execute(run: Run, *, settings: SolverSettings, telemetry: Telemetry | None,
         with run.changed:
             if run.progress is not None:
                 run.add_event("progress", data=run.progress)
-            run.result, run.error, run.done = result, error, True
+            run.result, run.error, run.ended_at, run.done = result, error, time.time(), True
             run.add_event("done", data=Finished(status=None if result is None else result.status, error=error))
 
 
-def _stream(run: Run, *, after: int) -> Iterator[ServerSentEvent]:
-    sent = after + 1
+def _stream(run: Run, *, after: int | None) -> Iterator[ServerSentEvent]:
+    """The run's events after event `after`, or all of them, ending once the run has ended."""
+    sent = 0 if after is None else after + 1
     while True:
         with run.changed:
             while len(run.events) <= sent and not run.done:
@@ -199,7 +211,7 @@ def create_app(telemetry: Telemetry | None) -> FastAPI:
             raise HTTPException(status_code=422, detail=str(invalid)) from invalid
         if not workers.acquire(blocking=False):
             raise HTTPException(status_code=429, detail=f"all {WORKERS} workers are busy; try again when a run ends")
-        run = Run(id=new_run_id(), model=request.model, instance=instance)
+        run = Run(id=new_run_id(), model=request.model, instance=instance, exported=telemetry is not None)
         settings = SolverSettings(expose_search=request.expose_search, work_limit=request.work_limit)
         _start(run, settings=settings, telemetry=telemetry, workers=workers)
         with runs_lock:
@@ -213,9 +225,12 @@ def create_app(telemetry: Telemetry | None) -> FastAPI:
     @app.get("/api/runs/{run_id}/events", response_class=EventSourceResponse)
     def run_events(
         run: ExistingRun, *, last_event_id: Annotated[int | None, Header(ge=0)] = None
-    ) -> Iterator[ServerSentEvent]:
+    ) -> Iterator[Progress | Finished]:
         """`progress` events at most every 0.2 s, then a final `progress` and a `done`. Resumes after Last-Event-ID."""
-        yield from _stream(run, after=-1 if last_event_id is None else last_event_id)
+        # The annotation puts both payload types in the OpenAPI schema. The items are ServerSentEvent wrappers,
+        # which FastAPI sends as they are instead of validating them against the annotation (fastapi/routing.py).
+        events = _stream(run, after=last_event_id)
+        yield from cast(Iterator[Progress | Finished], events)
 
     @app.post("/api/runs/{run_id}/cancel", status_code=202)
     def cancel_run(run: ExistingRun) -> RunView:
@@ -226,3 +241,19 @@ def create_app(telemetry: Telemetry | None) -> FastAPI:
         return run.view()
 
     return app
+
+
+def add_ui(app: FastAPI, *, ui: Path) -> None:
+    """Serve a built UI (Vite's `dist` directory) at every path outside `/api`. Call it after create_app,
+    so every API route matches first.
+
+    A path that isn't a built file gets index.html, which lets the UI's own routes (such as /runs/<id>) load the app.
+    """
+    root = ui.resolve()
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def ui_file(path: str) -> FileResponse:
+        if path == "api" or path.startswith("api/"):
+            raise HTTPException(status_code=404, detail=f"there is no API endpoint /{path}")
+        file = (root / path).resolve()
+        return FileResponse(file if file.is_file() and file.is_relative_to(root) else root / "index.html")

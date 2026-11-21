@@ -18,7 +18,7 @@ What to build, in order, and when each step counts as done. The rules for *how* 
 | 6 | Operational edges: early stop, warm start, IIS, determinism | Done |
 | 7 | Required test set | Done |
 | 8 | API with live progress | Done |
-| 9 | UI | Not started |
+| 9 | UI | Done |
 
 Update this table in the same commit that finishes a step.
 
@@ -109,10 +109,10 @@ Checked by planting one bug at a time in the code each required test guards, suc
 
 - `ui/`: React, Vite and TypeScript (D19), with types generated from the OpenAPI schema (D20).
 - Quality checks (D22): `"strict": true` in `tsconfig.app.json` (the template doesn't set it), oxlint, Prettier and Vitest, run together by `npm run check`. First compare oxlint with ESLint and typescript-eslint on planted issues, as D22 asks.
-- Three pages: New run; Run view (live gap, incumbent and bound from SSE, Cancel, a link to Grafana); Result (a Gantt chart for Model 1, demand against staffing for Model 2, the IIS highlighted when infeasible).
+- Two pages: New run, and a run page that shows live progress (gap, incumbent and bound from SSE, Cancel, a link to Grafana) and then the result (a Gantt chart for Model 1, demand against staffing for Model 2, the IIS explained when infeasible).
 - `ground-ops serve` starts the API and serves the built UI from `ui/dist` (D20). If the build is missing, it serves the API only and says so. The Vite dev server proxies `/api` while developing.
 - The Grafana link opens the provisioned dashboard filtered to the run's `run_id` and its time window.
-- The run view closes its `EventSource` on `done`; otherwise the browser reconnects to the closed stream forever. The `done` payload's type isn't in the OpenAPI schema yet, because FastAPI doesn't document SSE payloads; add it so the UI's types are generated, not hand-written.
+- The run view closes its `EventSource` on `done`; otherwise the browser reconnects to the closed stream forever. Both event payload types (`Progress` and `Finished`) are in the OpenAPI schema, so the UI's types are generated, not hand-written (D20).
 
 **Done when:** Vitest tests in `ui/` pass with a mocked API and cover all four statuses (optimal, limit reached, infeasible, interrupted). A run started from the UI against the real API reaches each page, and cancelling it shows `interrupted`.
 

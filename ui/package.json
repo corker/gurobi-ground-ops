@@ -1,0 +1,39 @@
+{
+  "name": "ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "types": "mkdir -p node_modules/.tmp && uv run ground-ops openapi > node_modules/.tmp/openapi.json && openapi-typescript node_modules/.tmp/openapi.json -o src/api.gen.ts --default-non-nullable false",
+    "types:check": "npm run types -- --check",
+    "lint": "oxlint --type-aware",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "check": "npm run types:check && tsc -b && npm run lint && prettier --check . && vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^8.0.0",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.13",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "@vitest/coverage-v8": "^5.1.1",
+    "jsdom": "^31.0.1",
+    "openapi-typescript": "^7.13.0",
+    "oxlint": "^1.90.0",
+    "oxlint-tsgolint": "^7.0.2007",
+    "prettier": "^3.10.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.1"
+  }
+}
