@@ -21,17 +21,16 @@ The difference between them is the **gap**. When the gap closes, the solver has 
 
 ## Quick start
 
-With [uv](https://docs.astral.sh/uv/), [Node](https://nodejs.org/) and [Docker](https://docs.docker.com/get-started/get-docker/) (Engine 25 or later) installed and Docker running:
+With [Docker](https://docs.docker.com/get-started/get-docker/) (Engine 25 or later) running:
 
 ```sh
-scripts/setup.sh   # Python and its packages, the UI's packages, the grafana/otel-lgtm image
-scripts/start.sh   # the observability stack, a fresh UI build, the app with telemetry on; opens the UI
-scripts/stop.sh    # the app and the stack
+docker compose up --wait   # the observability stack, the API and the UI
+docker compose down        # stop everything; the stack's telemetry goes with it
 ```
 
-`start.sh` waits until the stack is healthy, then opens http://127.0.0.1:8000 in your browser; Grafana is at http://localhost:3000. Ctrl-C stops the app and leaves the stack running, so the runs stay visible in Grafana. `stop.sh` stops both, from any terminal; the stack's telemetry goes with it. The scripts are bash, for macOS and Linux. From a fresh clone with the stack stopped, the browser opened 25 s after `start.sh` began ([D24](docs/design-decisions.md#24-setup-and-start-scripts)).
+Then open the UI at http://127.0.0.1:5173 and Grafana at http://localhost:3000. The source is mounted into the containers: the API reloads when a Python file changes, and the UI updates in the browser when a UI file changes, usually within a few seconds; Docker Desktop's file sharing sometimes delays a change much longer, and reloading the page doesn't help until the change arrives. `docker compose logs -f api` follows the API's output. Measured on the machine in [docs/experiments.md](docs/experiments.md), with the images already pulled: `up --wait` took 28 s the first time (installing the packages into the containers) and 10 s after that ([D25](docs/design-decisions.md#25-the-app-in-docker-for-local-development)).
 
-[How to run](#how-to-run) runs each part on its own.
+The CLI, the tests and the UI's checks run on the host: [How to run](#how-to-run).
 
 ## Terms used below
 
@@ -49,7 +48,7 @@ scripts/stop.sh    # the app and the stack
 ## How it fits together
 
 ```
-  browser (React UI) ──HTTP/SSE──▶ FastAPI (/api, 127.0.0.1)
+  browser ─▶ Vite (React UI) ──HTTP/SSE──▶ FastAPI (/api)
                                       │  one Gurobi environment per run
   CLI (ground-ops solve) ────────▶ core library
                                       ├─ instance generators (seeded)
@@ -58,14 +57,16 @@ scripts/stop.sh    # the app and the stack
                                       └─ telemetry (solver callback)
                                             │ OTLP, only when a collector is configured
                                             ▼
-                          docker compose: grafana/otel-lgtm
+                          grafana/otel-lgtm
                           (Prometheus, Tempo, Loki, Grafana)
+
+  docker compose runs lgtm, the API and the UI; the CLI and the tests run on the host.
 ```
 
 - **Core library (Python):** seeded instance generators, the two models, and the Gurobi solve. A solver callback emits the gap, incumbent, bound, incumbent improvements, node count, simplex iterations, elapsed time and work units.
 - **Telemetry:** OpenTelemetry metrics, plus traces and logs. They go over OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set; when it isn't, nothing is exported. The opt-in integration tests check all three against a real `grafana/otel-lgtm` container.
 - **Observability stack:** one [`grafana/otel-lgtm`](https://github.com/grafana/docker-otel-lgtm) container in Docker Compose, with a provisioned dashboard. The image is intended for development, demo and testing.
-- **API:** FastAPI on `127.0.0.1`. Start a run, stream its progress over server-sent events, cancel it, fetch the result. Runs live in memory.
+- **API:** FastAPI, reachable from `127.0.0.1` only. Start a run, stream its progress over server-sent events, cancel it, fetch the result. Runs live in memory.
 - **UI:** React, Vite and TypeScript, in two pages: a new-run form, and a run page that shows live progress and then the result.
 
 The core library never imports the API or UI. `uv run pytest` needs no Docker, no Node and no browser; the UI has its own tests in `ui/`.
@@ -142,7 +143,7 @@ Each point carries `run_id` and `model` (`assignment` or `coverage`) attributes.
 
 ### Watching a solve in Grafana
 
-`compose.yaml` runs one `grafana/otel-lgtm` container: an OpenTelemetry Collector with Prometheus (metrics), Tempo (traces), Loki (logs) and Grafana. It needs Docker; the app itself still runs on your machine.
+The `lgtm` service in `compose.yaml` is one `grafana/otel-lgtm` container: an OpenTelemetry Collector with Prometheus (metrics), Tempo (traces), Loki (logs) and Grafana. The CLI runs on your machine and exports to it on port 4318.
 
 ```sh
 docker compose up --wait
@@ -163,10 +164,9 @@ uv run pytest -m integration
 
 ### The HTTP API
 
-`ground-ops serve` runs the API on `127.0.0.1:8000` (`--port` to change it). It listens on localhost only and has no authentication. Runs live in memory and are lost when it stops. FastAPI serves the generated OpenAPI schema at `/docs`.
+`docker compose up --wait` runs the API on http://127.0.0.1:8000, reachable from this machine only, with no authentication. Runs live in memory and are lost when it restarts, including when it reloads after a code change; a reload waits at most 1 s for open event streams, then closes them. FastAPI serves the generated OpenAPI schema at `/docs`.
 
 ```sh
-uv run ground-ops serve
 curl -s -X POST localhost:8000/api/runs -H 'content-type: application/json' \
   -d '{"model": "assignment", "tasks": 40, "seed": 1, "expose_search": true}'
 curl -sN localhost:8000/api/runs/<id>/events
@@ -223,16 +223,11 @@ Read: tasks 0, 1 and 3 overlap pairwise, and two handlers can't cover three over
 
 ### The UI
 
-The UI is a React app in `ui/`. It needs [Node](https://nodejs.org/) only to build it; `ground-ops serve` then serves the build together with the API:
+The UI is a React app in `ui/`, served by Vite in Docker Compose at http://127.0.0.1:5173; Vite passes `/api` through to the API container. **New run** starts a Model 1 or Model 2 run. The **run page** shows the incumbent, bound, gap and node count live, with a chart of incumbent against bound and a Cancel button. When the run ends, the same page shows the result: for Model 1, a timeline per handler with each task and the minutes of overtime marked; for Model 2, people on duty against demand per half hour, with the roster; for an infeasible run, the conflicting rules in plain words and the tasks involved on one time axis. Each run page links to the run in Grafana, filtered to its `run_id` and time window.
 
-```sh
-cd ui && npm ci && npm run build && cd ..
-uv run ground-ops serve
-```
+Solves started from the UI run on Linux in the API container, so their node counts and work units can differ from the ones in this README and in [docs/experiments.md](docs/experiments.md), which come from the CLI on macOS. The 40-task, seed 1 solve with the search exposed took 32,741 nodes in the container against 32,424 on the host, with the same optimum. Gurobi promises identical runs only on the same computer.
 
-Open http://127.0.0.1:8000. **New run** starts a Model 1 or Model 2 run. The **run page** shows the incumbent, bound, gap and node count live, with a chart of incumbent against bound and a Cancel button. When the run ends, the same page shows the result: for Model 1, a timeline per handler with each task and the minutes of overtime marked; for Model 2, people on duty against demand per half hour, with the roster; for an infeasible run, the conflicting rules in plain words and the tasks involved on one time axis. With `OTEL_EXPORTER_OTLP_ENDPOINT` set, a run page links to the run in Grafana, filtered to its `run_id` and time window.
-
-To work on the UI, run `uv run ground-ops serve` and, in `ui/`, `npm run dev`: Vite serves the UI at http://127.0.0.1:5173 with hot reload and passes `/api` through to the API on port 8000. `npm run check` in `ui/` must pass before a UI change is done: it checks the generated API types are current, then runs `tsc` in strict mode, oxlint with type-aware rules, Prettier and Vitest. After an API change, `npm run types` regenerates `src/api.gen.ts` from the API's OpenAPI schema (`uv run ground-ops openapi`).
+To check a UI change, install the UI's packages on the host (`cd ui && npm ci`, which also gives your editor the types) and run `npm run check` in `ui/`. It must pass before a UI change is done: it checks the generated API types are current, then runs `tsc` in strict mode, oxlint with type-aware rules, Prettier and Vitest. After an API change, `npm run types` regenerates `src/api.gen.ts` from the API's OpenAPI schema (`uv run ground-ops openapi`).
 
 ## Models
 

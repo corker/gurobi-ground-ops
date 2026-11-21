@@ -34,7 +34,7 @@ function parse(text: string): unknown {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init).catch(() => {
-    throw new ApiError(0, "can't reach the API; is `ground-ops serve` running?")
+    throw new ApiError(0, "can't reach the API; is `docker compose up` running?")
   })
   const text = await response.text()
   if (!response.ok)

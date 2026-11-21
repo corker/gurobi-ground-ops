@@ -1,12 +1,12 @@
-# Local observability stack only: Grafana, Prometheus, Tempo and Loki behind one OpenTelemetry Collector.
-# The app runs on the host and exports to it with OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318.
+# Local development: the observability stack, the API and the UI. The source is mounted, so the API reloads and the
+# UI updates in the browser when a file changes. Nothing here is a production setup.
 services:
   lgtm:
     image: grafana/otel-lgtm:0.41.1
     ports:
-      - "3000:3000" # Grafana
-      - "4318:4318" # OTLP over HTTP
-      - "9090:9090" # Prometheus, for querying metrics directly
+      - "127.0.0.1:3000:3000" # Grafana
+      - "127.0.0.1:4318:4318" # OTLP over HTTP, for the CLI on the host
+      - "127.0.0.1:9090:9090" # Prometheus, for querying metrics directly
     # The image checks its health every 30 s, so `up --wait` would wait 30 s for the first check; during the start
     # period it checks every second instead. start_interval needs Docker Engine 25.0 or later.
     healthcheck:
@@ -16,3 +16,50 @@ services:
       - ./grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/ground-ops.yaml:ro
       # A directory, not single files: editors that save by replacing a file would leave a file mount stale.
       - ./grafana/dashboards:/otel-lgtm/grafana/conf/provisioning/dashboards/ground-ops:ro
+
+  api:
+    image: ghcr.io/astral-sh/uv:0.10.5-python3.12-trixie-slim
+    working_dir: /app
+    volumes:
+      - .:/app
+      # The environment lives outside the mounted source, so it doesn't clash with the host's .venv.
+      - venv:/venv
+      - uv-cache:/root/.cache/uv
+    environment:
+      UV_PROJECT_ENVIRONMENT: /venv
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
+    command: >
+      uv run --frozen --no-dev uvicorn ground_ops.api:app_from_environment --factory
+      --reload --reload-dir src --timeout-graceful-shutdown 1 --host 0.0.0.0 --port 8000
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "/venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json')"]
+      start_period: 2m
+      start_interval: 1s
+    depends_on:
+      lgtm:
+        condition: service_healthy
+
+  ui:
+    image: node:24.22.3-slim
+    working_dir: /ui
+    volumes:
+      - ./ui:/ui
+      # Installed in the container: the host's node_modules holds macOS builds of native packages.
+      - node-modules:/ui/node_modules
+    command: sh -c "npm ci --no-audit --no-fund && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "127.0.0.1:5173:5173"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      start_period: 2m
+      start_interval: 1s
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  venv:
+  uv-cache:
+  node-modules:

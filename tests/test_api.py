@@ -2,7 +2,6 @@ import json
 import subprocess
 import sys
 from collections.abc import Iterator
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -201,39 +200,22 @@ def test_the_core_modules_dont_load_the_web_stack() -> None:
     assert subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True).stdout == "[]\n"
 
 
-@pytest.fixture
-def ui_build(tmp_path: Path) -> Path:
-    build = tmp_path / "dist"
-    (build / "assets").mkdir(parents=True)
-    (build / "index.html").write_text("<div id=root></div>")
-    (build / "assets" / "app.js").write_text("console.log(1)")
-    (tmp_path / "secret.txt").write_text("not part of the build")
-    return build
+def test_the_app_from_the_environment_exports_nothing_without_an_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    with TestClient(api.app_from_environment()) as client:
+        assert client.get(f"/api/runs/{start(client, model='coverage')}").json()["exported"] is False
 
 
-@pytest.mark.parametrize(
-    ("path", "body"),
-    [
-        ("/", "<div id=root></div>"),
-        ("/runs/1795214339-57938-1", "<div id=root></div>"),
-        ("/assets/app.js", "console.log(1)"),
-        ("/assets/missing.js", "<div id=root></div>"),
-        ("/..%2Fsecret.txt", "<div id=root></div>"),
-    ],
-)
-def test_the_ui_build_is_served_and_its_own_routes_load_the_app(ui_build: Path, path: str, body: str) -> None:
-    app = api.create_app(None)
-    api.add_ui(app, ui=ui_build)
-    response = TestClient(app).get(path)
-    assert (response.status_code, response.text) == (200, body)
-
-
-def test_with_the_ui_served_an_unknown_api_path_is_still_a_json_404(ui_build: Path) -> None:
-    app = api.create_app(None)
-    api.add_ui(app, ui=ui_build)
-    response = TestClient(app).get("/api/nothing-here")
-    assert response.status_code == 404
-    assert response.headers["content-type"] == "application/json"
+def test_the_app_from_the_environment_flushes_its_telemetry_when_it_stops(
+    monkeypatch: pytest.MonkeyPatch, in_memory: InMemoryTelemetry
+) -> None:
+    flushed: list[bool] = []
+    monkeypatch.setattr(in_memory.telemetry, "shutdown", lambda: flushed.append(True))
+    monkeypatch.setattr(api, "telemetry_from_environment", lambda: in_memory.telemetry)
+    with TestClient(api.app_from_environment()) as client:
+        assert client.get(f"/api/runs/{start(client, model='coverage')}").json()["exported"] is True
+        assert flushed == []
+    assert flushed == [True]
 
 
 def test_a_run_reports_when_it_started_and_ended_and_whether_it_is_exported(client: TestClient) -> None:

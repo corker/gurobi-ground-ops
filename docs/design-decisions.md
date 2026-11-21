@@ -31,11 +31,12 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 | 17 | Observability, API and UI | API | FastAPI under `/api` on `127.0.0.1`; one Gurobi environment per run; cancel through `terminate()` | High (90%) |
 | 18 | Observability, API and UI | Progress transport | SSE for progress; plain requests for everything else | High (85%) |
 | 19 | Observability, API and UI | UI library | React with Vite and TypeScript | Medium (75%) |
-| 20 | Observability, API and UI | UI serving and API types | Vite dev proxy while developing; FastAPI serves the built UI; types generated with openapi-typescript | High (85%) |
+| 20 | Observability, API and UI | UI serving and API types | Types generated with openapi-typescript; serving the UI superseded by decision 25 | High (85%) |
 | 21 | Observability, API and UI | Run identity in telemetry | A `run_id` unique across processes, as a metric attribute on observable gauges for active runs only, with a raised cap | High (85%) |
 | 22 | Observability, API and UI | TypeScript quality checks | `tsc` with `strict: true`, oxlint with type-aware rules, Prettier, Vitest; one `npm run check` | High (85%) |
 | 23 | Licence and models | Data types | Frozen, strict Pydantic models everywhere, core and API (decided) | High (85%) |
-| 24 | Observability, API and UI | Setup and start scripts | Bash scripts in `scripts/` to set up, start and stop; a faster healthcheck so `docker compose up --wait` returns when the stack is ready | High (90%) |
+| 24 | Observability, API and UI | Setup and start scripts | Superseded by decision 25; its faster healthcheck stays | High (90%) |
+| 25 | Observability, API and UI | The app in Docker for local development | Yes (decided): Compose runs the stack, the API with reload and Vite, with the source bind-mounted; the CLI and tests stay on the host | Medium (70%) |
 
 ## 1. gurobipy version and licence
 
@@ -280,7 +281,7 @@ Observed details that shape the design:
 | Separate collector, Prometheus, Tempo, Loki and Grafana containers | Closer to a real deployment | Five services to configure for a local learning tool |
 | No stack; stdout only | Nothing to run | No dashboards, which the plan requires |
 
-**Recommendation.** One `grafana/otel-lgtm` service in `compose.yaml`, with the dashboard provisioned as JSON. The app runs on the host, not in a container.
+**Recommendation.** One `grafana/otel-lgtm` service in `compose.yaml`, with the dashboard provisioned as JSON. The app runs on the host, not in a container (superseded by decision 25: Compose now runs the app too).
 
 Measured in Step 5 against `grafana/otel-lgtm:0.41.1`:
 
@@ -307,7 +308,7 @@ Two bugs found in the spike, which become rules:
 | Starlette directly | Smaller | Hand-written SSE and no generated schema |
 | No API; CLI only | Simplest | No cancel from the UI; no live progress |
 
-**Recommendation.** FastAPI under `/api`, bound to `127.0.0.1`, no auth. Endpoints: `POST /api/runs`, `GET /api/runs/{id}`, `GET /api/runs/{id}/events`, `POST /api/runs/{id}/cancel`. Runs execute in a thread pool. Each run gets its own environment. Creating and freeing environments happens under one process-wide lock, because Gurobi documents both as not thread-safe and FastAPI runs sync handlers on pool threads. The spike created environments on the request thread without a lock, which is safe only while requests don't overlap. Two workers; when both are busy, `POST /api/runs` returns 429. Runs are kept in memory.
+**Recommendation.** FastAPI under `/api`, bound to `127.0.0.1` (since decision 25, reachable from `127.0.0.1` only: it listens inside a container whose port is published on `127.0.0.1`), no auth. Endpoints: `POST /api/runs`, `GET /api/runs/{id}`, `GET /api/runs/{id}/events`, `POST /api/runs/{id}/cancel`. Runs execute in a thread pool. Each run gets its own environment. Creating and freeing environments happens under one process-wide lock, because Gurobi documents both as not thread-safe and FastAPI runs sync handlers on pool threads. The spike created environments on the request thread without a lock, which is safe only while requests don't overlap. Two workers; when both are busy, `POST /api/runs` returns 429. Runs are kept in memory.
 
 **Confidence: High (90%)**, measured in a spike and then built in Step 8. Tests run two solves at once, each to its own optimum, and check the 429 when both workers are busy. Cancelling sets a flag that the progress callback checks before calling `terminate()`, which Gurobi documents as callable "from a callback, from another thread", so the API never holds a model from another thread. A cancel only takes effect inside `optimize`: one that arrives after the solve has returned, or while the IIS is computed, leaves the result unchanged, and one after the run has ended returns 409. The lock covers creating, starting and freeing each environment. Gurobi's article doesn't say whether `env.start()` must be serialised, or whether freeing a model on its worker thread outside the lock is safe (its C example frees models in the worker thread); both are unverified. The existence check is a FastAPI dependency, which runs before the response starts; with the lookup moved inside the stream, the 404 test fails.
 
@@ -359,6 +360,8 @@ Measured: FastAPI served the built UI. A catch-all route returning `index.html` 
 Built in Step 9. The events endpoint is annotated `Iterator[Progress | Finished]`, which makes FastAPI 0.165.0 document both payload types under the stream's `itemSchema` while still sending the `ServerSentEvent` wrappers it yields (a `cast` tells mypy). openapi-typescript 7.13.0 then generates `Progress` and `Finished`; `ui/src/api.ts` links each event name to its type, the one hand-written link. Two findings: openapi-typescript declares TypeScript `^5.x` as a peer, and with the template's TypeScript 7.0.2 it fails at startup, because TypeScript 7 has no JavaScript compiler API (`ts.factory` is undefined), so the UI uses TypeScript 5.9.3. And by default openapi-typescript treats any field with a default as required, which made the optional request fields required; `--default-non-nullable false` fixes it. A run started from the built UI against the real API, driven in Chrome by a one-off Playwright script (not kept in the repo), reached every page: optimal, limit reached, infeasible and a Model 2 roster; a 40-task run with the search exposed showed live progress and, cancelled from its page, ended as `interrupted`; loading a run's page by its URL worked. The run page's Grafana link was checked in Chrome against the Grafana in `grafana/otel-lgtm:0.41.1`: `/d/ground-ops-solver` without the slug redirected to the slugged URL, `from` and `to` in epoch milliseconds were applied as the time range, and `var-run_id` selected the run. Grafana's docs state the `var-` prefix and that `from` and `to` take "ms, epoch, or relative time" ([URL variables](https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/create-dashboard-url-variables/)); the slug-less form isn't documented there, only observed.
 
 **Confidence: High (85%).** Measured end to end. The TypeScript 5 pin lasts until openapi-typescript supports TypeScript 7.
+
+**Superseded in part by decision 25:** Vite serves the UI in Docker Compose, so FastAPI no longer serves `ui/dist` and `ground-ops serve` is gone. The generated types are unchanged.
 
 ## 21. Run identity in telemetry
 
@@ -429,6 +432,8 @@ Measured with Pydantic 2.14.4: in its default (lax) mode, `Task(id="3", start="3
 
 ## 24. Setup and start scripts
 
+**Superseded by decision 25:** Docker Compose runs the app, so the scripts are gone. The faster healthcheck below still applies to the stack.
+
 One command to install everything (Python packages, UI packages, the `grafana/otel-lgtm` image) and one to start everything (the stack, a UI build, the app with telemetry) and open the UI. Single developer, macOS, local only.
 
 | Option | Needs | Pros | Cons |
@@ -446,6 +451,37 @@ One command to install everything (Python packages, UI packages, the `grafana/ot
 **Recommendation.** Bash scripts. `setup.sh` checks for uv, npm and a running Docker, then runs `uv sync`, `npm ci` (installs exactly the lockfile) and `docker compose pull`. `start.sh` refuses to start if port 8000 is taken or the UI's packages are missing, runs `docker compose up --wait`, builds the UI, opens the browser once the app answers, and `exec`s `ground-ops serve` with `OTEL_EXPORTER_OTLP_ENDPOINT` set. The stack keeps running after Ctrl-C, so finished runs stay in Grafana. `stop.sh` stops the `ground-ops serve` process by name, not whatever holds port 8000, then runs `docker compose down`.
 
 **Confidence: High (90%).** Measured on 2026-11-21 on the machine in [experiments.md](experiments.md), under macOS's bash 3.2, from a fresh clone: setup succeeded; with the stack stopped, `start.sh` opened the browser after 25 s; a run was exported and its `run_id` reached Prometheus; a second `start.sh` was refused; Ctrl-C stopped the app; `stop.sh` after a start shut the app down cleanly and removed the stack, and with nothing running said so and exited 0; `start.sh` before setup said to run setup; setup with Docker unreachable (`DOCKER_HOST` pointed at a missing socket) or uv not on the `PATH` named what was missing. ShellCheck reports nothing. Not tested: Linux (`xdg-open`), and setup on a machine with nothing cached (the fresh-clone setup took 4 s because uv, npm and Docker had everything cached).
+
+## 25. The app in Docker for local development
+
+Decided by the owner: run the API and the UI in Docker Compose next to the stack, with the source bind-mounted, the API reloading on change and Vite in dev mode, so `docker compose up --wait` starts everything and `docker compose down` stops it. Measured on 2026-11-21 on the machine in [experiments.md](experiments.md) (Docker Desktop, Engine 28.4.0, default file sharing).
+
+| Check | Result |
+| --- | --- |
+| Free licence in a Linux container | Works: the same bundled licence and size limit; a model over 2,000 variables refused |
+| Same solve as on the host (40 tasks, search exposed) | Same optimum (30), different search: 32,741 nodes and 3.1037 work units against 32,424 and 3.1705 on macOS, repeatable within each |
+| Host edits seen in a container through the bind mount | Varies from run to run. Once all nine (append, rewrite, write-then-rename) arrived as inotify events and as changed `stat` results after 0.08 to 1.86 s; in a later run of ten rewrites 2 s apart, 6 weren't visible within 2 s; in a third run, 3 weren't. Events and `stat` were late together, so the delay is in Docker Desktop's file sharing, not in a watcher |
+| API: `uvicorn --factory --reload` | Uvicorn without `watchfiles` polls file times (`StatReload`). Six edits, each reloaded and answering again after 0.65 to 1.35 s |
+| UI: Vite in the container, a browser connected, edits to a heading | With `server.watch.usePolling`, 3 of 5 edits never reached the browser in 20 s. With Vite's default (inotify), all 18 edits over three runs arrived, the slowest after 10.9 s; a second time, again 18 of 18, after 0.18 to 4.80 s. In between, six runs on Node 24, 25 and 26 missed 12 of 36 edits within 20 s; the cause was not found (the Mac did not sleep) |
+| The same with Vite on the host | All five: 13.8 s for the first, then 0.07 to 1.28 s |
+| `up --wait`, images cached | 28 s with empty volumes (installing the Python and npm packages), 10 s after |
+| `npm ci` on Linux | Failed: the lockfile made on macOS lacked two optional packages Linux needs; regenerated so it installs on both |
+
+Two measuring methods gave misleading results and were dropped: fetching a module from Vite over HTTP, and Vite's `hmr` debug log, both of which missed changes even with Vite on the host. Only a connected browser counts.
+
+**How it's set up.**
+- **API:** the `uv` image runs `uvicorn ground_ops.api:app_from_environment --factory --reload`. The factory flushes telemetry when the app stops, and the environment lives in a volume (`/venv`), apart from the host's `.venv`. `--timeout-graceful-shutdown 1` stops a reload from waiting for open event streams: with a run page's stream open, a reload waited 6.4 s, until the run ended; with the timeout, 1.8 s, closing the stream. Every published port, the stack's included, is on `127.0.0.1` only.
+- **UI:** the `node` image (Node 24, the maintained LTS line; Node 25 reached end of life on 2026-06-01 per [Node's release schedule](https://github.com/nodejs/Release/blob/main/schedule.json)) runs `npm ci` and then `vite --host 0.0.0.0`. `node_modules` lives in a volume, because the host's holds macOS builds of native packages, and Vite's proxy points at the `api` service.
+- **Readiness:** each service has a healthcheck with `start_interval: 1s`, and each depends on the one before being healthy, so `up --wait` returns when the UI answers.
+- **Removed:** `ground-ops serve`, `add_ui`, the UI's production build and the scripts.
+
+**Costs.**
+- Solves from the UI run on Linux, so their search can differ from the numbers in the README and in the experiments, which come from the CLI on macOS.
+- UI updates are a little slower and more variable than with Vite on the host.
+- A runtime reload of the API forgets the runs in memory.
+- Gurobi's free licence says "non-production use only", and nothing here is a production setup.
+
+**Confidence: Medium (70%)** that the setup works as described. The API reloaded on every edit measured, but UI changes sometimes reached the browser late or not within 20 s, for a reason not found. It's measured on one machine; Linux hosts and other Docker Desktop file-sharing settings weren't tried.
 
 ## Know about, don't build
 

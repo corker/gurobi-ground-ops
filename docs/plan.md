@@ -68,7 +68,7 @@ Start only after Model 1 is done and tested.
 
 ## Step 5: Observability stack
 
-- `compose.yaml` with one `grafana/otel-lgtm` service (D16). The app keeps running on the host.
+- `compose.yaml` with one `grafana/otel-lgtm` service (D16). The app keeps running on the host. (Superseded by D25: Compose now runs the app too.)
 - A Grafana dashboard provisioned as JSON: incumbent and bound on one panel, and gap, nodes and incumbent improvements on others, filtered by `run_id`. Queries use Prometheus's renamed metrics, such as `groundops_solver_gap_ratio`.
 - Traces with one span per phase (instance generation, model build, solve), carrying `run_id`. Step 6 adds a span for IIS. Gurobi's log lines go to Loki through the `MESSAGE` callback.
 
@@ -110,7 +110,7 @@ Checked by planting one bug at a time in the code each required test guards, suc
 - `ui/`: React, Vite and TypeScript (D19), with types generated from the OpenAPI schema (D20).
 - Quality checks (D22): `"strict": true` in `tsconfig.app.json` (the template doesn't set it), oxlint, Prettier and Vitest, run together by `npm run check`. First compare oxlint with ESLint and typescript-eslint on planted issues, as D22 asks.
 - Two pages: New run, and a run page that shows live progress (gap, incumbent and bound from SSE, Cancel, a link to Grafana) and then the result (a Gantt chart for Model 1, demand against staffing for Model 2, the IIS explained when infeasible).
-- `ground-ops serve` starts the API and serves the built UI from `ui/dist` (D20). If the build is missing, it serves the API only and says so. The Vite dev server proxies `/api` while developing.
+- (Superseded by D25: Docker Compose now runs the API and Vite.) `ground-ops serve` starts the API and serves the built UI from `ui/dist` (D20). If the build is missing, it serves the API only and says so. The Vite dev server proxies `/api` while developing.
 - The Grafana link opens the provisioned dashboard filtered to the run's `run_id` and its time window.
 - The run view closes its `EventSource` on `done`; otherwise the browser reconnects to the closed stream forever. Both event payload types (`Progress` and `Finished`) are in the OpenAPI schema, so the UI's types are generated, not hand-written (D20).
 

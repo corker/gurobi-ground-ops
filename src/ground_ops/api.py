@@ -6,13 +6,11 @@ https://fastapi.tiangolo.com/tutorial/server-sent-events/
 
 import threading
 import time
-from collections.abc import Iterator
-from contextlib import AbstractContextManager, nullcontext
-from pathlib import Path
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import AbstractAsyncContextManager, AbstractContextManager, asynccontextmanager, nullcontext
 from typing import Annotated, Literal, cast
 
 from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,13 +20,14 @@ from ground_ops.model1 import model_size, solve_assignment
 from ground_ops.model2 import solve_coverage
 from ground_ops.progress import Progress, ProgressRecorder
 from ground_ops.solver import FREE_LICENCE_LIMIT, SolverSettings, check_size
-from ground_ops.telemetry import Telemetry, new_run_id
+from ground_ops.telemetry import Telemetry, new_run_id, telemetry_from_environment
 
 WORKERS = 2
 PROGRESS_INTERVAL_S = 0.2
 
 type ModelName = Literal["assignment", "coverage"]
 type RunState = Literal["running", "done", "failed"]
+type Lifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 
 
 class RunRequest(BaseModel):
@@ -187,8 +186,8 @@ def _start(run: Run, *, settings: SolverSettings, telemetry: Telemetry | None, w
         raise
 
 
-def create_app(telemetry: Telemetry | None) -> FastAPI:
-    app = FastAPI(title="ground-ops")
+def create_app(telemetry: Telemetry | None, *, lifespan: Lifespan | None = None) -> FastAPI:
+    app = FastAPI(title="ground-ops", lifespan=lifespan)
     runs: dict[str, Run] = {}
     runs_lock = threading.Lock()
     workers = threading.BoundedSemaphore(WORKERS)
@@ -243,17 +242,15 @@ def create_app(telemetry: Telemetry | None) -> FastAPI:
     return app
 
 
-def add_ui(app: FastAPI, *, ui: Path) -> None:
-    """Serve a built UI (Vite's `dist` directory) at every path outside `/api`. Call it after create_app,
-    so every API route matches first.
+def app_from_environment() -> FastAPI:
+    """The app with telemetry from the environment, for `uvicorn --factory`, which can then reload it."""
+    telemetry = telemetry_from_environment()
+    if telemetry is None:
+        return create_app(None)
 
-    A path that isn't a built file gets index.html, which lets the UI's own routes (such as /runs/<id>) load the app.
-    """
-    root = ui.resolve()
+    @asynccontextmanager
+    async def flush_telemetry(_app: FastAPI) -> AsyncIterator[None]:
+        yield
+        telemetry.shutdown()
 
-    @app.get("/{path:path}", include_in_schema=False)
-    def ui_file(path: str) -> FileResponse:
-        if path == "api" or path.startswith("api/"):
-            raise HTTPException(status_code=404, detail=f"there is no API endpoint /{path}")
-        file = (root / path).resolve()
-        return FileResponse(file if file.is_file() and file.is_relative_to(root) else root / "index.html")
+    return create_app(telemetry, lifespan=flush_telemetry)

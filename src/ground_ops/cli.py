@@ -101,35 +101,10 @@ def _with_telemetry[T](model: str, *, solve: Callable[[ProgressRecorder | None],
         telemetry.shutdown()
 
 
-UI_BUILD = Path(__file__).resolve().parents[2] / "ui" / "dist"
-
-
 def _print_openapi() -> None:
     from ground_ops.api import create_app
 
     print(json.dumps(create_app(None).openapi(), indent=2))
-
-
-def _serve(port: int) -> None:
-    # Imported here so the solve and cover commands never load the web stack.
-    import uvicorn
-
-    from ground_ops.api import add_ui, create_app
-
-    telemetry = telemetry_from_environment()
-    app = create_app(telemetry)
-    if (UI_BUILD / "index.html").is_file():
-        add_ui(app, ui=UI_BUILD)
-        print(f"ground-ops: serving the UI at http://127.0.0.1:{port}", file=sys.stderr)
-    else:
-        print(
-            f"ground-ops: no UI build in {UI_BUILD}, serving the API only (run `npm run build` in ui/)", file=sys.stderr
-        )
-    try:
-        uvicorn.run(app, host="127.0.0.1", port=port)
-    finally:
-        if telemetry is not None:
-            telemetry.shutdown()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -152,13 +127,8 @@ def main(argv: list[str] | None = None) -> int:
         "--handlers", type=int, help="number of handlers (default: one more than the most tasks that overlap)"
     )
     commands.add_parser("cover", parents=[solver_options], help="solve a seeded Model 2 instance and print the roster")
-    serve = commands.add_parser("serve", help="run the HTTP API, and the built UI if there is one, on 127.0.0.1")
-    serve.add_argument("--port", type=int, default=8000, help="port to listen on (default: 8000)")
     commands.add_parser("openapi", help="print the API's OpenAPI schema as JSON, for the UI's generated types")
     args = parser.parse_args(argv)
-    if args.command == "serve":
-        _serve(args.port)
-        return 0
     if args.command == "openapi":
         _print_openapi()
         return 0

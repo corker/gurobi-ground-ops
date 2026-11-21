@@ -41,7 +41,7 @@ Apply the first group to every feature, then the groups that match what the feat
 | --- | --- | --- | --- |
 | 15 | **API contract** | Does every solver status (optimal, limit reached, infeasible, interrupted) map to exactly one API status that the UI handles? Does a missing run return 404 before any stream starts? Are the TypeScript types generated from the OpenAPI schema? | Repo purpose; D17, D20 |
 | 16 | **Concurrency safety** | Does each run get its own Gurobi environment, created and freed under one lock (D17)? Is shared state (the run table, the samples) guarded? Can a cancel race with a run that has just finished? | [Gurobi race conditions](https://support.gurobi.com/hc/en-us/articles/40912136522129); Google: parallel programming |
-| 17 | **Input safety** | Is every request validated, and is an instance over the free-licence size rejected before it's built? Does the API bind to `127.0.0.1` only? | ISO: security |
+| 17 | **Input safety** | Is every request validated, and is an instance over the free-licence size rejected before it's built? Is the API reachable from `127.0.0.1` only (its port published on `127.0.0.1` in Compose)? | ISO: security |
 | 18 | **Solution inspection** | Can a non-modeller judge from the views alone whether the answer makes operational sense: who works when, where the overtime comes from, which tasks and handlers clash? | Repo purpose: formulation vs operational questions |
 | 19 | **Basic accessibility** | Semantic HTML, keyboard-reachable controls, readable contrast, and charts with a text label? | ISO: interaction capability (inclusivity) |
 
@@ -59,7 +59,7 @@ These lenses matter in related work, but not for this repo's purpose. If the sco
 | Safety | ISO: safety | Synthetic data that drives no real people or equipment. |
 | Availability, scalability of a service | ISO: reliability, flexibility | Local, single-user, run on demand. Runs are lost on restart. |
 | Solver independence (running the same suite on a second solver) | Research code tied to one commercial solver | Gurobi only, by choice (D5). The pip package's bundled licence already lets anyone run the tests. |
-| Authentication and multi-user state | ISO: security | Bound to `127.0.0.1`; one user. |
+| Authentication and multi-user state | ISO: security | Reachable from `127.0.0.1` only; one user. |
 | Privacy | ISO: security | No personal data. Generated IDs only, never real names. |
 | Cost, sustainability, internationalisation | Common architecture frameworks | No hosted infrastructure, no spend, English only. |
 
