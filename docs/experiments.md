@@ -1,10 +1,10 @@
 # Experiments
 
-Measurements that back numbers quoted in the README and in [design-decisions.md](design-decisions.md). Each has a script in [`experiments/`](../experiments) that reproduces it.
+Measurements behind the numbers in the README and in [design-decisions.md](design-decisions.md). Each section gives the script in [`experiments/`](../experiments), or the command, that reproduces it.
 
-**Machine and settings for every result below:** Apple M4 Pro (14 cores), macOS 26.6.2, Python 3.12.12, gurobipy 14.0.0 with the free bundled licence, opentelemetry-sdk 1.45.2, one solver thread (`Threads=1`, `Seed=0`). Measured on 2026-11-20.
+**Machine and settings for every result below:** Apple M4 Pro (14 cores), macOS 26.6.2, Python 3.12.12, gurobipy 14.0.0 with the free bundled licence, opentelemetry-sdk 1.45.2, one solver thread (`Threads=1`, `Seed=0`). Measured on 2026-11-20 unless a section gives another date.
 
-**About wall-clock time.** Work units and node counts are deterministic: the same run gives the same numbers every time. Wall-clock time isn't. On this machine, the same 3-second solve has taken over 22 seconds when other work was running. So every wall-clock result here is a median of repeated runs, reported with its range, and two separate runs are shown where they disagree.
+**About wall-clock time.** Work units and node counts are deterministic: the same run gives the same numbers every time. Wall-clock time isn't: on this machine, the same 3-second solve has taken over 22 seconds when other work was running. So each wall-clock result here is a median of repeated runs with its range, and where two runs disagree, both are shown.
 
 ## Root solves (D4)
 
@@ -171,7 +171,7 @@ A brute-force enumeration of every assignment of the four exact 10-task instance
 
 ## Pairwise against clique no-overlap (D3, D15)
 
-Model 1's no-overlap rule written pairwise, as in the package, and as one constraint per handler and clique. Two tasks conflict when `[start, end + 10 min)` intervals overlap, so the tasks running at any task's start form a clique, and those cliques cover every conflicting pair. The script builds the clique form itself; the package keeps the pairwise form. The LP bound is from `Model.relax()`. Constraint counts include the one cover constraint per task. Measured on 2026-11-21.
+Model 1's no-overlap rule written pairwise, as in the package, and as one constraint per handler and clique. Two tasks conflict when `[start, end + 10 min)` intervals overlap, so the tasks running at any task's start form a clique, and those cliques cover every conflicting pair. The script builds the clique form itself; the package uses the pairwise form. The LP bound is from `Model.relax()`. Constraint counts include the one cover constraint per task. Measured on 2026-11-21.
 
 ```sh
 uv run python experiments/clique_no_overlap.py
@@ -233,5 +233,5 @@ Model 1, default handlers, 20 seeds per size, limit 2000 of each
 | `OTEL_EXPORTER_OTLP_TIMEOUT=1` | 1.9, 0.2, 1.2 s | 1.2 s |
 | Endpoint not set | 0.2, 0.2, 0.2 s | 0.2 s |
 
-**Finding:** the solve itself is quick; the wait is the exporters retrying at shutdown. Unset the endpoint when the stack isn't running, or lower the timeout.
+**Finding:** the solve is quick; the wait is the exporters retrying at shutdown. Unset the endpoint when the stack isn't running, or lower the timeout.
 

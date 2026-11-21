@@ -38,4 +38,4 @@ For Model 2, the shift patterns are every 4-, 6- and 8-hour shift that fits betw
 - **No uncertainty.** Times are known exactly in advance; there are no delays.
 - **Synthetic data only.** IDs are numbers; there are no real airports, airlines or names.
 
-The models stay textbook on purpose; [related-work.md](related-work.md) lists papers that handle the richer versions.
+[related-work.md](related-work.md) lists papers that handle the richer versions.

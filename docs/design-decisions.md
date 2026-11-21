@@ -2,9 +2,9 @@
 
 Each topic below lists the alternatives, compares them, recommends one, and rates the confidence in that recommendation. Where confidence isn't high, it says what would raise it.
 
-**Contributors:** you don't need to read this file end to end. [plan.md](plan.md) cites a decision number (D1 to D23) wherever one applies; read those sections only.
+**Contributors:** you don't need to read this file end to end. [plan.md](plan.md) cites a decision number (D1, D2, ...) wherever one applies; read those sections only.
 
-All measurements come from throwaway proof-of-concept scripts run on 2026-11-20. Those scripts aren't in the repo. The key numbers will be re-measured by reproducible scripts in `experiments/`, as listed in [plan.md](plan.md). Settings: Apple M4 Pro, macOS (Darwin 25.6), Python 3.12.12, gurobipy 14.0.0, ortools 9.15.6755, highspy 1.16.0, PuLP 4.3.1, opentelemetry-sdk 1.45.2, `Threads=1` unless stated. Every timing is from one machine, so it shows relative differences only. Work units are Gurobi's deterministic effort measure, so they compare cleanly across runs; wall-clock seconds don't.
+Unless a section says otherwise, measurements come from throwaway proof-of-concept scripts run on 2026-11-20, which aren't in the repo. Numbers re-measured by a script in `experiments/` link to [experiments.md](experiments.md). Settings: Apple M4 Pro, macOS (Darwin 25.6), Python 3.12.12, gurobipy 14.0.0, ortools 9.15.6755, highspy 1.16.0, PuLP 4.3.1, opentelemetry-sdk 1.45.2, `Threads=1` unless stated. Every timing is from one machine, so it shows relative differences only. Work units are Gurobi's deterministic effort measure, so they compare cleanly across runs; wall-clock seconds don't.
 
 **Confidence levels.** **High** (85% or more) means measured here, or confirmed by primary docs, with nothing contradicting it. **Medium** (60–85%) means one instance family, a secondary source, or a judgement call. **Low** (below 60%) means a plausible guess.
 
@@ -28,19 +28,18 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 | 14 | Docs and experiments | Experiment journal | Scripts in `experiments/`, results in `docs/experiments.md` (decided) | High (90%) |
 | 15 | Docs and experiments | Where the bound comes from | Teach it through decisions 3 and 4, with no extra code | High (85%) |
 | 16 | Observability, API and UI | Observability stack | `grafana/otel-lgtm` in Docker Compose; OTLP over HTTP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set; no export otherwise | High (85%) |
-| 17 | Observability, API and UI | API | FastAPI under `/api` on `127.0.0.1`; one Gurobi environment per run; cancel through `terminate()` | High (90%) |
+| 17 | Observability, API and UI | API | FastAPI under `/api`, reachable from `127.0.0.1` only; one Gurobi environment per run; cancel through `terminate()` | High (90%) |
 | 18 | Observability, API and UI | Progress transport | SSE for progress; plain requests for everything else | High (85%) |
 | 19 | Observability, API and UI | UI library | React with Vite and TypeScript | Medium (75%) |
-| 20 | Observability, API and UI | UI serving and API types | Types generated with openapi-typescript; serving the UI superseded by decision 25 | High (85%) |
+| 20 | Observability, API and UI | UI serving and API types | Types generated with openapi-typescript on TypeScript 5; Vite serves the UI in Compose (D24) | High (85%) |
 | 21 | Observability, API and UI | Run identity in telemetry | A `run_id` unique across processes, as a metric attribute on observable gauges for active runs only, with a raised cap | High (85%) |
 | 22 | Observability, API and UI | TypeScript quality checks | `tsc` with `strict: true`, oxlint with type-aware rules, Prettier, Vitest; one `npm run check` | High (85%) |
 | 23 | Licence and models | Data types | Frozen, strict Pydantic models everywhere, core and API (decided) | High (85%) |
-| 24 | Observability, API and UI | Setup and start scripts | Superseded by decision 25; its faster healthcheck stays | High (90%) |
-| 25 | Observability, API and UI | The app in Docker for local development | Yes (decided): Compose runs the stack, the API with reload and Vite, with the source bind-mounted; the CLI and tests stay on the host | Medium (70%) |
+| 24 | Observability, API and UI | The app in Docker for local development | Yes (decided): Compose runs the stack, the API with reload and Vite, with the source bind-mounted; the CLI and tests run on the host | Medium (70%) |
 
 ## 1. gurobipy version and licence
 
-**Finding.** The pip licence allows 2,000 variables and 2,000 linear constraints, or 200 variables if there are quadratic terms ([Gurobi: model too large](https://support.gurobi.com/hc/en-us/articles/360051597492), updated 2026-03-24). It also expires per major version. Version 13's licence expires on 2026-11-23, version 12's on 2025-11-24 ([Gurobi: licence expired 2026-11-23](https://support.gurobi.com/hc/en-us/articles/19487474933521)). gurobipy 14.0.0 (released 2026-11-10) printed `Restricted license - for non-production use only - expires 2028-11-29` here. Two more things were observed: a model over the limit fails at `optimize()` with `GurobiError: Model too large for size-limited license`, and `NumVars` reads 0 until `update()` is called.
+**Finding.** The pip licence allows 2,000 variables and 2,000 linear constraints, or 200 variables if there are quadratic terms ([Gurobi: model too large](https://support.gurobi.com/hc/en-us/articles/360051597492), updated 2026-03-24). It also expires per major version. Version 13's licence expires on 2026-11-23, version 12's on 2025-11-24 ([Gurobi: licence expired 2026-11-23](https://support.gurobi.com/hc/en-us/articles/19487474933521)). gurobipy 14.0.0 (released 2026-11-10) printed `Restricted license - for non-production use only - expires 2028-11-29` here. Also observed: a model over the limit fails at `optimize()` with `GurobiError: Model too large for size-limited license`, and `NumVars` reads 0 until `update()` is called.
 
 | Option | Pros | Cons |
 | --- | --- | --- |
@@ -62,7 +61,7 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 | Distance from a handler's home stand (an assignment cost) | Yes | Same as the first option | Doesn't capture "between consecutive tasks", so it would misstate the plan |
 | Minimise handlers used | Yes | Similar | Not a cost the plan names |
 
-**Recommendation.** Overtime outside each handler's shift window. Record the choice and the reason in the README.
+**Recommendation.** Overtime outside each handler's shift window, with the choice and the reason in the README.
 
 **Confidence: High (90%).** The sizes are measured, and the choice is decided. [Tian 2022](https://doi.org/10.1371/journal.pone.0279131) also supports it: tasks are assigned to shifts with start times and durations, and it notes that extending a shift by 30 minutes "is very common".
 
@@ -83,11 +82,13 @@ Measured with [`experiments/clique_no_overlap.py`](../experiments/clique_no_over
 
 **Recommendation.** Pairwise in the package, because the plan asks for a textbook, obvious formulation. The clique form is a recorded experiment (decision 14). It is the clearest demonstration in this repo of the formulation affecting the bound.
 
-**Confidence: High (85%).** The bounds are measured. The clique form's "LP equals optimum" result held on every instance tried, but wasn't proven in general.
+**Confidence: High (85%).** The bounds are measured. The clique form's "LP equals optimum" result held on every instance tried, but isn't proven in general.
 
 ## 4. Making the search visible
 
-**Finding.** Every variant tried was solved at the root node in milliseconds under default settings. That covered both Model 1 objectives, both conflict rules, sizes up to the free limit, and Model 2 set covering with 593 patterns. Single changes (`Cuts=0`, `Presolve=0` or `Heuristics=0`) still solved at the root. `Cuts=0` and `Presolve=0` together on Model 1 (T=30) took 31,675 nodes and 4.99 work units.
+**Finding.** Every proof-of-concept variant was solved at the root node in milliseconds under default settings. That covered both Model 1 objectives, both conflict rules, sizes up to the free limit, and Model 2 set covering with 593 patterns. Single changes (`Cuts=0`, `Presolve=0` or `Heuristics=0`) still solved at the root. `Cuts=0` and `Presolve=0` together on Model 1 (T=30) took 31,675 nodes and 4.99 work units.
+
+With the repo's own generators, across 20 seeds each: all 80 Model 1 instances of 20 to 48 tasks solved at the root, and 18 of 20 Model 2 days did (at most 37 nodes otherwise). With `Presolve=0, Cuts=0`, Model 1 at 48 tasks needed 1 to 170,454 nodes, but Model 2 stayed easy (median 1 node), so the visible-search demos use Model 1. Gurobi 14 reports a few cuts in the log even with `Cuts=0`; the cause is unverified (see [reading-the-log.md](reading-the-log.md)).
 
 | Option | Pros | Cons |
 | --- | --- | --- |
@@ -95,19 +96,17 @@ Measured with [`experiments/clique_no_overlap.py`](../experiments/clique_no_over
 | Harder model features (tight per-handler capacity) | Natural difficulty | Most generated instances were infeasible; the feasible ones still solved at the root |
 | Bigger instances | Natural | Ruled out by the free licence |
 
-**Recommendation.** The first option. Say in the README that textbook instances at free-licence sizes are easy for Gurobi 14, and that the curves shown come from switching presolve and cuts off.
+**Recommendation.** The first option. The README says that textbook instances at free-licence sizes are easy for Gurobi 14, and that the curves shown come from switching presolve and cuts off.
 
-**Re-measured in Step 4 with the repo's own generators** (the numbers above came from proof-of-concept variants): across 20 seeds each, all 80 Model 1 instances of 20 to 48 tasks solved at the root, and 18 of 20 Model 2 days did (at most 37 nodes otherwise). With `Presolve=0, Cuts=0`, Model 1 at 48 tasks needed 1 to 170,454 nodes, but Model 2 stayed easy (median 1 node), so the visible-search demos use Model 1. Gurobi 14 still reports a few cuts in the log with `Cuts=0`; the cause is unverified (see [reading-the-log.md](reading-the-log.md)).
-
-**Confidence: High (90%).** A follow-up sweep under default settings ran Model 1 at T=20, 30 and 35 and Model 2 at 32 and 48 slots, with 20 seeds each. All 99 instances within the limit solved at the root node, and one T=35 instance exceeded the limit. The remaining doubt is model variants not yet tried.
+**Confidence: High (90%).** A sweep under default settings ran Model 1 at T=20, 30 and 35 and Model 2 at 32 and 48 slots, with 20 seeds each. All 99 instances within the limit solved at the root node, and one T=35 instance exceeded the limit. The remaining doubt is model variants not tried.
 
 ## 5. Second solver backend
 
 **Decided: none. The repo uses Gurobi only.**
 
-The original requirements asked for a second, open-source backend so that the repo would run without a Gurobi licence. Two findings removed that need: the pip `gurobipy` package bundles a free licence that covers every instance here (D1), and the owner's interest is Gurobi specifically. When the bundled licence nears expiry (2028-11-29 for version 14), bumping the pin to the next major version renews it.
+A second, open-source backend would let the repo run without a Gurobi licence. That isn't needed: the pip `gurobipy` package bundles a free licence that covers every instance here (D1), and the owner's interest is Gurobi specifically. When the bundled licence nears expiry (2028-11-29 for version 14), bumping the pin to the next major version renews it.
 
-Before the decision, the candidates were measured on the same Model 1 instance. The data is kept here in case the question comes back:
+The candidates, measured on the same Model 1 instance:
 
 | Candidate | Live progress | Deterministic | IIS for a MIP | Licence | Latest release |
 | --- | --- | --- | --- | --- | --- |
@@ -115,9 +114,9 @@ Before the decision, the candidates were measured on the same Model 1 instance. 
 | CP-SAT (OR-Tools) | Incumbent, bound, wall time, branches; no nodes or simplex iterations | Yes with one worker and a fixed seed | No | Apache-2.0 | 9.15.6755, 2026-01-14 |
 | PuLP | Passes callbacks through to HiGHS; none found for CBC | As its solver | No | MIT | 4.3.1, 2026-11-19 |
 
-A spike (a throwaway proof of concept) ran Model 1 on Gurobi and HiGHS behind one `Protocol` and passed the same feasibility checks on both, with objective 55 on each.
+A spike ran Model 1 on Gurobi and HiGHS behind one `Protocol`; both passed the same feasibility checks, with objective 55 on each.
 
-**What this removes:** the backend `Protocol`, capability flags such as "IIS unavailable", a second effort-limit mapping, and a backend choice in the API and UI.
+With one solver there is no backend `Protocol`, no capability flags such as "IIS unavailable", no second effort-limit mapping, and no backend choice in the API and UI.
 
 **Confidence: High (95%).** It's a scope decision, and the facts it rests on are measured.
 
@@ -133,9 +132,9 @@ A spike (a throwaway proof of concept) ran Model 1 on Gurobi and HiGHS behind on
 | Simplex iterations | `MIP_ITRCNT` |
 | Elapsed time and effort | `RUNTIME`, `WORK` |
 
-Gurobi codes are from the [callback codes reference](https://docs.gurobi.com/projects/optimizer/en/current/reference/numericcodes/callbacks.html). Gurobi notes that `MIPSOL_OBJ` is "not necessarily better than the current incumbent" and that `MIP_SOLCNT` counts solutions presented, not improvements. So the improvement count must be computed by comparing values.
+Gurobi codes are from the [callback codes reference](https://docs.gurobi.com/projects/optimizer/en/current/reference/numericcodes/callbacks.html). Gurobi notes that `MIPSOL_OBJ` is "not necessarily better than the current incumbent" and that `MIP_SOLCNT` counts solutions presented, not improvements. So the improvement count is computed by comparing values.
 
-Instruments, measured with `InMemoryMetricReader` on SDK 1.45.2: a synchronous gauge (`create_gauge`) for gap, incumbent, bound, nodes and iterations, and a counter for improvements. Both export correctly. Those two measurements came from the proof of concept. Re-measured in Step 4 on the real callback ([experiments.md](experiments.md)): Model 1 with 40 tasks and the search exposed took identical work units and node counts in every run with and without it, and the median wall-clock difference was smaller than this machine's run-to-run noise. The last callback sample did **not** always match the final attributes, so the recorder takes its final sample from `ObjVal`, `ObjBound`, `NodeCount` and `IterCount` after the solve. Names: OpenTelemetry's registry has no `solver` namespace, and its rules ask for lowercase, dot-separated, namespaced names with UCUM units ([naming](https://opentelemetry.io/docs/specs/semconv/general/naming/)).
+Measured on the real callback ([experiments.md](experiments.md)): Model 1 with 40 tasks and the search exposed took identical work units and node counts in every run with and without it, and the median wall-clock difference was smaller than this machine's run-to-run noise. The last callback sample did **not** always match the final attributes, so the recorder takes its final sample from `ObjVal`, `ObjBound`, `NodeCount` and `IterCount` after the solve. Names: OpenTelemetry's registry has no `solver` namespace, and its rules ask for lowercase, dot-separated, namespaced names with UCUM units ([naming](https://opentelemetry.io/docs/specs/semconv/general/naming/)).
 
 **Recommendation.** All seven metrics above. The callback records the latest values at every MIP callback, the exporter sends them once a second, and observable gauges report them for active runs only (D21 explains why not synchronous gauges). A project prefix, for example `groundops.solver.gap`, avoids a future clash.
 
@@ -151,9 +150,9 @@ Instruments, measured with `InMemoryMetricReader` on SDK 1.45.2: a synchronous g
 
 Reproducibility, measured: the same seed and thread count gave identical nodes (31,675), work (4.9858) and iterations (206,354) on two runs. With 4 threads instead of 1, the same model took 81,639 nodes and reached the same optimum.
 
-Re-measured by [`experiments/threads.py`](../experiments/threads.py) on five 40-task instances with the search exposed (results in [experiments.md](experiments.md#one-thread-against-four-d7)): four threads explored a different number of nodes from one thread on four of the five, reached the same optimum on all five, and every run repeated exactly. Gurobi's [WorkLimit reference](https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html) says work limits are deterministic, and its [determinism article](https://support.gurobi.com/hc/en-us/articles/360031636051) says the same model and parameters give the same results on the same computer and Gurobi version, with multiple threads too. Neither says results depend on the thread count; that part is measured, not documented.
+[`experiments/threads.py`](../experiments/threads.py) ran five 40-task instances with the search exposed ([experiments.md](experiments.md#one-thread-against-four-d7)): four threads explored a different number of nodes from one thread on four of the five, reached the same optimum on all five, and every run repeated exactly. Gurobi's [WorkLimit reference](https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html) says work limits are deterministic, and its [determinism article](https://support.gurobi.com/hc/en-us/articles/360031636051) says the same model and parameters give the same results on the same computer and Gurobi version, with multiple threads too. Neither says results depend on the thread count; that part is measured, not documented.
 
-**Recommendation.** `WorkLimit`, already in `AGENTS.md`. Built in Step 6: a solve stopped by `WorkLimit` (status 16, `WORK_LIMIT`) returns "limit reached" with its best solution, bound and gap; a bound or gap Gurobi reports as infinite (no bound yet) becomes "none".
+**Recommendation.** `WorkLimit`, as `AGENTS.md` requires. A solve stopped by `WorkLimit` (status 16, `WORK_LIMIT`) returns "limit reached" with its best solution, bound and gap; a bound or gap Gurobi reports as infinite (no bound yet) becomes "none".
 
 **Confidence: High (95%).**
 
@@ -171,11 +170,11 @@ The differences are within the spread between seeds. On these instances the incu
 
 A partial `Start`, which leaves the moved task's variables undefined, gave a median of 4.35 (3.28–5.53) on the same 9 runs, also within the spread. Fixing the unaffected assignments wasn't measured, because it changes the problem being solved.
 
-**Recommendation.** Use `Start` (Gurobi's [variable attribute](https://docs.gurobi.com/projects/optimizer/en/current/reference/attributes/variable.html), which may be partial). Report the work-unit distribution across seeds, as lens 13 requires. State the result honestly, even if it's "no measurable gain", with the explanation above. It makes a good lesson on incumbent versus bound.
+[`experiments/warm_start.py`](../experiments/warm_start.py) ran 20 seeds of 40 tasks, one task delayed 25 minutes, search exposed ([results](experiments.md#warm-start-against-cold-start-d8)): median work 0.137 cold, 0.146 with the full previous schedule and 0.155 with a partial one. The full start needed less work on 7 of 20 seeds and the partial one on 12. On seed 4 both starts took 45.6 work units against 3.7 cold: the start changed the search path, and that path proved the bound far more slowly. Gurobi's [determinism article](https://support.gurobi.com/hc/en-us/articles/360031636051) lists a starting solution among the inputs that may change results. Why this path is slower is unverified.
 
-Re-measured by [`experiments/warm_start.py`](../experiments/warm_start.py) on 20 seeds of 40 tasks, one task delayed 25 minutes, search exposed ([results](experiments.md#warm-start-against-cold-start-d8)): median work 0.137 cold, 0.146 with the full previous schedule and 0.155 with a partial one. The full start needed less work on 7 of 20 seeds and the partial one on 12. On seed 4 both starts took 45.6 work units against 3.7 cold: the start changed the search path, and that path proved the bound far more slowly. Gurobi's [determinism article](https://support.gurobi.com/hc/en-us/articles/360031636051) lists a starting solution among the inputs that may change results. Why this path is slower is unverified.
+**Recommendation.** Use `Start` (Gurobi's [variable attribute](https://docs.gurobi.com/projects/optimizer/en/current/reference/attributes/variable.html), which may be partial). Report the work-unit distribution across seeds, as lens 13 requires, and state the result: no consistent gain, with the explanation above. It makes a good lesson on incumbent versus bound.
 
-**Confidence: High (85%)** that a warm start brings no consistent gain on this repo's instances: 20 seeds, two start variants, and the earlier 9-run measurement agree. Model 2 can't be used to check it: it solved at the root even with presolve, cuts and heuristics off, so there's nothing for a warm start to speed up.
+**Confidence: High (85%)** that a warm start brings no consistent gain on this repo's instances: 20 seeds, two start variants, and the 9-run measurement agree. Model 2 can't be used to check it: it solved at the root even with presolve, cuts and heuristics off, so there's nothing for a warm start to speed up.
 
 ## 9. Infeasibility diagnosis
 
@@ -187,9 +186,9 @@ Measured: Model 1 with 3 handlers (fewer than the peak overlap) is infeasible. G
 | `feasRelax` | The cheapest way to violate constraints | Gurobi |
 | Elastic cover (penalised slack variables in the model) | Which tasks can't be covered | Any solver |
 
-**Recommendation.** An IIS on Gurobi, as the plan requires, with readable constraint names. `feasRelax` and an elastic cover are optional later additions.
+**Recommendation.** An IIS on Gurobi, as the plan requires, with readable constraint names. `feasRelax` and an elastic cover aren't built.
 
-Built in Step 6 for Model 1: an infeasible solve calls [`computeIIS`](https://docs.gurobi.com/projects/optimizer/en/current/reference/python/model.html) and returns the names of the constraints with [`IISConstr`](https://docs.gurobi.com/projects/optimizer/en/current/reference/attributes/constraintlinear.html) set. Gurobi says the IIS it returns "is not necessarily the smallest one"; every IIS computed here without a work limit reported `IISMinimal = 1`, and none included variable bounds (Gurobi's variable reference says binary bounds never do). All 200 infeasible solves in [`experiments/infeasible_status.py`](../experiments/infeasible_status.py) (five sizes, 20 seeds, with and without the search exposed) returned status 3, `INFEASIBLE`, never 4, `INF_OR_UNBD`. `computeIIS` obeys `WorkLimit` too, and a cut-short IIS is reported with `IISMinimal = 0` and more constraints than needed (111 instead of 45 on one instance), so the limit is lifted before the IIS is computed. Model 2 can only be infeasible when a slot has demand that no pattern covers, which the generated instances never have, so it reports infeasible without an IIS.
+For Model 1, an infeasible solve calls [`computeIIS`](https://docs.gurobi.com/projects/optimizer/en/current/reference/python/model.html) and returns the names of the constraints with [`IISConstr`](https://docs.gurobi.com/projects/optimizer/en/current/reference/attributes/constraintlinear.html) set. Gurobi says the IIS it returns "is not necessarily the smallest one"; every IIS computed here without a work limit reported `IISMinimal = 1`, and none included variable bounds (Gurobi's variable reference says binary bounds never do). All 200 infeasible solves in [`experiments/infeasible_status.py`](../experiments/infeasible_status.py) (five sizes, 20 seeds, with and without the search exposed) returned status 3, `INFEASIBLE`, never 4, `INF_OR_UNBD`. `computeIIS` obeys `WorkLimit` too, and a cut-short IIS is reported with `IISMinimal = 0` and more constraints than needed (111 instead of 45 on one instance), so the limit is lifted before the IIS is computed. Model 2 can only be infeasible when a slot has demand that no pattern covers, which the generated instances never have, so it reports infeasible without an IIS.
 
 **Confidence: High (90%).**
 
@@ -197,19 +196,19 @@ Built in Step 6 for Model 1: an infeasible solve calls [`computeIIS`](https://do
 
 Measured with [`experiments/tied_optima.py`](../experiments/tied_optima.py) ([experiments.md](experiments.md#tied-optimal-solutions-d10)): every 10-task instance tried has between 108 and at least 2,000 optimal schedules, confirmed by brute force where exact, and every 20- and 30-task instance has at least 2,000.
 
-| Option | Robust? |
+| Option | Stable across solver paths? |
 | --- | --- |
 | Assert one exact assignment | No: any valid path can return a different optimum |
 | **Assert the objective plus independent feasibility checks** | Yes |
 | Add a tie-breaking secondary objective to make the solution unique | It changes the model just for tests |
 
-**Recommendation.** Assert the objective plus feasibility, as `AGENTS.md` and lens 1 already require. Objectives are whole minutes, so compare them exactly.
+**Recommendation.** Assert the objective plus feasibility, as `AGENTS.md` and lens 1 require. Objectives are whole minutes, so compare them exactly.
 
 **Confidence: High (95%).**
 
 ## 11. Instance realism
 
-The [turnaround dataset](https://github.com/spadrona/airport_ground_handling_dataset) (file `FE.csv`, 65 turnarounds) gives durations in minutes: unloading baggage 7–24 (median 10), loading baggage 8–20 (median 13), and ground time 26–52 (median 28). The proof of concept used 20–60 minute tasks, which is longer than real baggage tasks.
+The [turnaround dataset](https://github.com/spadrona/airport_ground_handling_dataset) (file `FE.csv`, 65 turnarounds) gives durations in minutes: unloading baggage 7–24 (median 10), loading baggage 8–20 (median 13), and ground time 26–52 (median 28).
 
 | Option | Pros | Cons |
 | --- | --- | --- |
@@ -217,9 +216,9 @@ The [turnaround dataset](https://github.com/spadrona/airport_ground_handling_dat
 | Load the dataset directly | Real data | 65 turnarounds × 10 operations is far over the limit; adds precedence and equipment |
 | Uniform random durations | Simplest | Arbitrary |
 
-**Recommendation.** The first option. List the simplifications in `docs/domain.md`.
+**Recommendation.** The first option, with the simplifications listed in `docs/domain.md`.
 
-**Confidence: High (85%).** [Tian 2022](https://doi.org/10.1371/journal.pone.0279131) (real instances from a ground-handling provider) corroborates the shape of the problem: hundreds of tasks a day assigned to shifts, task durations in tens of minutes (for example 30), and qualifications per task. It doesn't publish a full duration distribution, so the dataset remains the source for the numbers.
+**Confidence: High (85%).** [Tian 2022](https://doi.org/10.1371/journal.pone.0279131) (real instances from a ground-handling provider) agrees on the shape of the problem: hundreds of tasks a day assigned to shifts, task durations in tens of minutes (for example 30), and qualifications per task. It doesn't publish a full duration distribution, so the dataset is the source for the numbers.
 
 ## 12. Domain glossary
 
@@ -253,7 +252,7 @@ The [turnaround dataset](https://github.com/spadrona/airport_ground_handling_dat
 | Results only, written by hand | Simplest | Can't be reproduced |
 | `pytest-benchmark` | Built-in statistics | Mixes measurements with tests; wall-clock based |
 
-**Recommendation.** The first option. The measurements in this doc are the first entries.
+**Recommendation.** The first option.
 
 **Confidence: High (90%).** A top-level `experiments/` directory is decided. The flat-layout rule applies to the package, not to scripts.
 
@@ -271,9 +270,12 @@ Measured on 2026-11-20 with `grafana/otel-lgtm:0.41.1` and opentelemetry-sdk 1.4
 
 Observed details that shape the design:
 
-- With `OTEL_EXPORTER_OTLP_ENDPOINT` unset, the SDK's HTTP exporter still defaults to `http://localhost:4318/v1/metrics`. So with the variable unset, the repo must not create an exporter at all. The original requirements asked for a plain-stdout fallback; it was dropped, because tests use an in-memory reader and the SSE stream and the Gurobi log cover watching a solve without a collector.
-- Prometheus renames metrics: dots become underscores and the unit becomes a suffix. `groundops.solver.gap` with unit `1` is queried as `groundops_solver_gap_ratio`, and unit `min` adds `_minutes`.
-- Grafana is coarse for short solves. With a 500 ms export interval, the first half-second of a 3.7-second solve (bound 0 and 15) never reached Prometheus. At 1-second query resolution the bound showed 35 then 55. The SSE stream (D18) is the fine-grained view; Grafana is the overview.
+- With `OTEL_EXPORTER_OTLP_ENDPOINT` unset, the SDK's HTTP exporter still defaults to `http://localhost:4318/v1/metrics`. So with the variable unset, the repo creates no exporter at all. There's no stdout fallback: tests use an in-memory reader, and the SSE stream and the Gurobi log cover watching a solve without a collector.
+- Prometheus renames metrics: dots become underscores and a real unit becomes a suffix (`1` gives `_ratio`, `s` gives `_seconds`, `min` gives `_minutes`); a `{…}` annotation adds none, so `groundops.solver.gap` is `groundops_solver_gap_ratio` and `groundops.solver.bound` is `groundops_solver_bound`.
+- Grafana is coarse for short solves. With a 500 ms export interval, the first half-second of a 3.7-second solve (bound 0 and 15) never reached Prometheus, and at 1-second query resolution the bound showed 35 then 55. With a 1-second export interval, a 2.6-second solve arrived as bound 23, 26, 30; the first second isn't sampled. The SSE stream (D18) is the fine-grained view; Grafana is the overview.
+- **Traces:** one trace per run, root span `ground-ops run` with `generate instance`, `build model` and `solve` children. Fetching by trace id works at once; Tempo's search found a new trace only after tens of seconds.
+- **Logs:** Gurobi delivers every log line to the `MESSAGE` callback even with `OutputFlag=0`. The lines reach Loki with `run_id` and the run's trace id, so a line links to its trace. The OpenTelemetry Python logs SDK is in [Development status](https://opentelemetry.io/docs/languages/python/) (traces and metrics are stable), so its exact version is locked in `uv.lock` (the `~=1.45` specifier alone would allow later 1.x releases).
+- **Dashboard provisioning:** mount the dashboards *directory*, not single files. A single-file bind mount keeps the original file, so an editor that saves by replacing the file leaves Grafana showing the old version.
 
 | Option | Pros | Cons |
 | --- | --- | --- |
@@ -281,15 +283,7 @@ Observed details that shape the design:
 | Separate collector, Prometheus, Tempo, Loki and Grafana containers | Closer to a real deployment | Five services to configure for a local learning tool |
 | No stack; stdout only | Nothing to run | No dashboards, which the plan requires |
 
-**Recommendation.** One `grafana/otel-lgtm` service in `compose.yaml`, with the dashboard provisioned as JSON. The app runs on the host, not in a container (superseded by decision 25: Compose now runs the app too).
-
-Measured in Step 5 against `grafana/otel-lgtm:0.41.1`:
-
-- **Metric names:** Prometheus adds a unit suffix only for real units (`1` gives `_ratio`, `s` gives `_seconds`); a `{…}` annotation adds none, so `groundops.solver.bound` is `groundops_solver_bound`.
-- **Curve:** with a 1-second export interval, a 2.6-second solve arrived as bound 23, 26, 30. The first second of the solve isn't sampled.
-- **Traces:** one trace per run, root span `ground-ops run` with `generate instance`, `build model` and `solve` children. Fetching by trace id works at once; Tempo's search found a new trace only after tens of seconds.
-- **Logs:** Gurobi delivers every log line to the `MESSAGE` callback even with `OutputFlag=0`. The lines reach Loki with `run_id` and the run's trace id, so a line links to its trace. The OpenTelemetry Python logs SDK is in [Development status](https://opentelemetry.io/docs/languages/python/) (traces and metrics are stable), so its exact version is locked in `uv.lock` (the `~=1.45` specifier alone would allow later 1.x releases).
-- **Dashboard provisioning:** mount the dashboards *directory*, not single files. A single-file bind mount keeps the original file, so an editor that saves by replacing the file leaves Grafana showing the old version.
+**Recommendation.** One `grafana/otel-lgtm` service in `compose.yaml`, with the dashboard provisioned as JSON. The API and the UI run next to it in Compose (D24); the CLI on the host exports to it on port 4318.
 
 **Confidence: High (85%).** The opt-in integration tests (`uv run pytest -m integration`) check, against a real container: the run's final bound in Prometheus under its translated name, Gurobi log lines in Loki, the trace in Tempo with all four span names, and the provisioned dashboard. The in-memory tests check that log records carry the run's trace id. Observed once by hand, not automated: the exact curve values, Loki's side of the log-to-trace link, and the stale single-file mount.
 
@@ -297,9 +291,9 @@ Measured in Step 5 against `grafana/otel-lgtm:0.41.1`:
 
 Measured with the free licence: two solves in parallel threads, each with its own environment, both completed (3.9 s each, 3.96 s wall clock). `terminate()` called from another thread after 0.5 s ended the solve with status `INTERRUPTED`, keeping the incumbent and a gap of 0.364. Gurobi's documented rule ([race conditions article](https://support.gurobi.com/hc/en-us/articles/40912136522129)) is that creating and freeing environments isn't thread-safe; using one environment per thread is. `terminate()` "can be called at any time during an optimization (from a callback, from another thread…)" ([Model API](https://docs.gurobi.com/projects/optimizer/en/current/reference/python/model.html)).
 
-Two bugs found in the spike, which become rules:
+Two bugs found in a spike, which became rules:
 
-- `model.copy()` before `update()` copied an empty model, so the solve "finished" instantly with objective 0. (`AGENTS.md` now requires `update()` first.)
+- `model.copy()` before `update()` copied an empty model, so the solve "finished" instantly with objective 0. `AGENTS.md` requires `update()` first.
 - A streaming endpoint returned `200 text/event-stream` for a run that didn't exist, because the response starts before the generator body runs. The existence check must happen before streaming starts.
 
 | Option | Pros | Cons |
@@ -308,9 +302,9 @@ Two bugs found in the spike, which become rules:
 | Starlette directly | Smaller | Hand-written SSE and no generated schema |
 | No API; CLI only | Simplest | No cancel from the UI; no live progress |
 
-**Recommendation.** FastAPI under `/api`, bound to `127.0.0.1` (since decision 25, reachable from `127.0.0.1` only: it listens inside a container whose port is published on `127.0.0.1`), no auth. Endpoints: `POST /api/runs`, `GET /api/runs/{id}`, `GET /api/runs/{id}/events`, `POST /api/runs/{id}/cancel`. Runs execute in a thread pool. Each run gets its own environment. Creating and freeing environments happens under one process-wide lock, because Gurobi documents both as not thread-safe and FastAPI runs sync handlers on pool threads. The spike created environments on the request thread without a lock, which is safe only while requests don't overlap. Two workers; when both are busy, `POST /api/runs` returns 429. Runs are kept in memory.
+**Recommendation.** FastAPI under `/api`, no auth, reachable from `127.0.0.1` only: it listens inside a container whose port is published on `127.0.0.1` (D24). Endpoints: `POST /api/runs`, `GET /api/runs/{id}`, `GET /api/runs/{id}/events`, `POST /api/runs/{id}/cancel`. Runs execute in a thread pool. Each run gets its own environment. Creating and freeing environments happens under one process-wide lock, because Gurobi documents both as not thread-safe and FastAPI runs sync handlers on pool threads; without the lock, creating them on the request thread is safe only while requests don't overlap. Two workers; when both are busy, `POST /api/runs` returns 429. Runs are kept in memory.
 
-**Confidence: High (90%)**, measured in a spike and then built in Step 8. Tests run two solves at once, each to its own optimum, and check the 429 when both workers are busy. Cancelling sets a flag that the progress callback checks before calling `terminate()`, which Gurobi documents as callable "from a callback, from another thread", so the API never holds a model from another thread. A cancel only takes effect inside `optimize`: one that arrives after the solve has returned, or while the IIS is computed, leaves the result unchanged, and one after the run has ended returns 409. The lock covers creating, starting and freeing each environment. Gurobi's article doesn't say whether `env.start()` must be serialised, or whether freeing a model on its worker thread outside the lock is safe (its C example frees models in the worker thread); both are unverified. The existence check is a FastAPI dependency, which runs before the response starts; with the lookup moved inside the stream, the 404 test fails.
+**Confidence: High (90%).** Tests run two solves at once, each to its own optimum, and check the 429 when both workers are busy. Cancelling sets a flag that the progress callback checks before calling `terminate()`, which Gurobi documents as callable "from a callback, from another thread", so the API never holds a model from another thread. A cancel only takes effect inside `optimize`: one that arrives after the solve has returned, or while the IIS is computed, leaves the result unchanged, and one after the run has ended returns 409. The lock covers creating, starting and freeing each environment. Gurobi's article doesn't say whether `env.start()` must be serialised, or whether freeing a model on its worker thread outside the lock is safe (its C example frees models in the worker thread); both are unverified. The existence check is a FastAPI dependency, which runs before the response starts; with the lookup moved inside the stream, the 404 test fails.
 
 ## 18. Progress transport
 
@@ -322,7 +316,7 @@ Measured against a running server: 20 progress events over 3.7 seconds for a ful
 | **SSE** | Server push; browser `EventSource` reconnects automatically; `Last-Event-ID` for resuming | `EventSource` only does GET, so cancel stays a separate POST |
 | WebSockets | Two-way | More than needed; reconnection is hand-written |
 
-**Recommendation.** SSE for progress. The solver thread appends samples and wakes the stream through a `threading.Condition`. On reconnect, resume from `Last-Event-ID`. Built in Step 8 with FastAPI's native SSE (`EventSourceResponse`, added in 0.135.0); a test checks that a client resuming from an event id gets exactly the events after it.
+**Recommendation.** SSE for progress, with FastAPI's native SSE (`EventSourceResponse`, added in 0.135.0). The solver thread appends samples and wakes the stream through a `threading.Condition`. On reconnect, the stream resumes from `Last-Event-ID`; a test checks that a client resuming from an event id gets exactly the events after it.
 
 **Confidence: High (85%).**
 
@@ -347,21 +341,20 @@ Svelte, Solid and Preact were compared on adoption only: npm weekly downloads of
 
 ## 20. UI serving and API types
 
-Measured: FastAPI served the built UI. A catch-all route returning `index.html` let a client-side route like `/runs/7` load the app instead of returning 404, and the API under `/api` didn't collide with it. Vite's dev server listened on `localhost` by default, and a client connecting to `127.0.0.1:5173` was refused; started with `--host 127.0.0.1`, it worked. The proxy target `http://127.0.0.1:8765` reached the API either way. Why `localhost` didn't answer on `127.0.0.1` wasn't investigated. With typed SSE models, openapi-typescript 7.13.0 generated a `Progress` type, but typed the stream response itself as `unknown`.
+Vite serves the UI in Docker Compose and passes `/api` through to the API container (D24).
 
-| Option | Pros | Cons |
-| --- | --- | --- |
-| **Vite dev server and proxy while developing; FastAPI serves `ui/dist` for a single-command run** | Fast UI iteration, plus one process to run | The build output must exist before `serve` |
-| Vite dev server only | Simplest | Two processes every time |
-| FastAPI only | One process | No hot reload while developing |
+The UI's TypeScript types for API payloads are generated from FastAPI's OpenAPI schema with openapi-typescript 7.13.0, not written by hand. With typed SSE models alone, openapi-typescript generated a `Progress` type but typed the stream response itself as `unknown`. So the events endpoint is annotated `Iterator[Progress | Finished]`, which makes FastAPI 0.165.0 document both payload types under the stream's `itemSchema` while still sending the `ServerSentEvent` wrappers it yields (a `cast` tells mypy). openapi-typescript then generates `Progress` and `Finished`; `ui/src/api.ts` links each event name to its type, the one hand-written link.
 
-**Recommendation.** The first option. The build output stays out of git. TypeScript types come from the OpenAPI schema; the SSE payload type is wired to the stream in one place in the UI.
+Two findings:
 
-Built in Step 9. The events endpoint is annotated `Iterator[Progress | Finished]`, which makes FastAPI 0.165.0 document both payload types under the stream's `itemSchema` while still sending the `ServerSentEvent` wrappers it yields (a `cast` tells mypy). openapi-typescript 7.13.0 then generates `Progress` and `Finished`; `ui/src/api.ts` links each event name to its type, the one hand-written link. Two findings: openapi-typescript declares TypeScript `^5.x` as a peer, and with the template's TypeScript 7.0.2 it fails at startup, because TypeScript 7 has no JavaScript compiler API (`ts.factory` is undefined), so the UI uses TypeScript 5.9.3. And by default openapi-typescript treats any field with a default as required, which made the optional request fields required; `--default-non-nullable false` fixes it. A run started from the built UI against the real API, driven in Chrome by a one-off Playwright script (not kept in the repo), reached every page: optimal, limit reached, infeasible and a Model 2 roster; a 40-task run with the search exposed showed live progress and, cancelled from its page, ended as `interrupted`; loading a run's page by its URL worked. The run page's Grafana link was checked in Chrome against the Grafana in `grafana/otel-lgtm:0.41.1`: `/d/ground-ops-solver` without the slug redirected to the slugged URL, `from` and `to` in epoch milliseconds were applied as the time range, and `var-run_id` selected the run. Grafana's docs state the `var-` prefix and that `from` and `to` take "ms, epoch, or relative time" ([URL variables](https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/create-dashboard-url-variables/)); the slug-less form isn't documented there, only observed.
+- openapi-typescript declares TypeScript `^5.x` as a peer, and with the template's TypeScript 7.0.2 it fails at startup, because TypeScript 7 has no JavaScript compiler API (`ts.factory` is undefined). The UI uses TypeScript 5.9.3.
+- By default openapi-typescript treats any field with a default as required, which made the optional request fields required; `--default-non-nullable false` fixes it.
 
-**Confidence: High (85%).** Measured end to end. The TypeScript 5 pin lasts until openapi-typescript supports TypeScript 7.
+The run page's Grafana link was checked in Chrome against the Grafana in `grafana/otel-lgtm:0.41.1`: `/d/ground-ops-solver` without the slug redirected to the slugged URL, `from` and `to` in epoch milliseconds were applied as the time range, and `var-run_id` selected the run. Grafana's docs state the `var-` prefix and that `from` and `to` take "ms, epoch, or relative time" ([URL variables](https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/create-dashboard-url-variables/)); the slug-less form isn't documented there, only observed.
 
-**Superseded in part by decision 25:** Vite serves the UI in Docker Compose, so FastAPI no longer serves `ui/dist` and `ground-ops serve` is gone. The generated types are unchanged.
+**Recommendation.** Generated types (`npm run types`), checked for staleness by `npm run check`. TypeScript stays on 5.x until openapi-typescript supports TypeScript 7.
+
+**Confidence: High (85%).** Measured.
 
 ## 21. Run identity in telemetry
 
@@ -378,7 +371,7 @@ Measured with opentelemetry-sdk 1.45.2's in-memory reader, plus one run against 
 
 Even with an observable gauge, the default cap still overflowed after 2,000 runs, because the SDK keeps every attribute set it has seen. That's why option 3 needs the raised cap.
 
-Measured in Step 4 with the real `Telemetry` class: the wildcard view `groundops.solver.*` does lift the cap (2,100 runs in one process, no overflow). The cost of keeping every attribute set is that each run's final flush walks all of them. Median flush time over 50 runs, Apple M4 Pro, two separate runs ([experiments.md](experiments.md)): 0.1 to 0.2 ms around run 100, 2.5 to 6.1 ms around run 2,000, and 13 to 16 ms around run 4,000. That's fine for a local tool, but a process serving many thousands of runs would want to be restarted.
+Measured with the real `Telemetry` class: the wildcard view `groundops.solver.*` lifts the cap (2,100 runs in one process, no overflow). The cost of keeping every attribute set is that each run's final flush walks all of them. Median flush time over 50 runs, Apple M4 Pro, two separate runs ([experiments.md](experiments.md)): 0.1 to 0.2 ms around run 100, 2.5 to 6.1 ms around run 2,000, and 13 to 16 ms around run 4,000. That's fine for a local tool, but a process serving many thousands of runs would want to be restarted.
 
 **Recommendation.** Option 3. The run ID is the process start time plus a counter (for example `1795203617-3`), so it stays unique when each CLI run is its own process. A plain counter would restart at 1 in every process and put every CLI run on the same series. Grafana filters on `run_id`. Lens 12 states the rule: one ID per run, unique across processes, on active-only instruments, with an explicit cap.
 
@@ -386,7 +379,7 @@ Measured in Step 4 with the real `Telemetry` class: the wildcard view `groundops
 
 ## 22. TypeScript quality checks
 
-The UI needs the same kind of enforced check as the Python side (`ruff`, `mypy --strict`, `pytest`). Measured on the throwaway React app from D19: the Vite `react-ts` template's `tsconfig.app.json` sets `noUnusedLocals`, `noUnusedParameters` and `noFallthroughCasesInSwitch`, but **not** `strict`. With `"strict": true` added, the app still compiled, and `tsc` caught a planted implicit-`any` parameter (`TS7006`) and a type mismatch (`TS2322`). The template ships oxlint with its React and TypeScript plugins; on the planted file oxlint reported nothing, which wasn't investigated. Prettier flagged 7 unformatted files, as expected for code written without a formatter.
+The UI needs the same kind of enforced check as the Python side (`ruff`, `mypy --strict`, `pytest`). Measured on the throwaway React app from D19: the Vite `react-ts` template's `tsconfig.app.json` sets `noUnusedLocals`, `noUnusedParameters` and `noFallthroughCasesInSwitch`, but **not** `strict`. With `"strict": true` added, the app still compiled, and `tsc` caught a planted implicit-`any` parameter (`TS7006`) and a type mismatch (`TS2322`). Prettier flagged 7 unformatted files, as expected for code written without a formatter.
 
 | Concern | Options (version, 2026-11-20) | Choice |
 | --- | --- | --- |
@@ -395,9 +388,7 @@ The UI needs the same kind of enforced check as the Python side (`ruff`, `mypy -
 | Formatting | Prettier 3.10.1; oxfmt 0.79.0 (pre-1.0); Biome 2.6.8 | Prettier |
 | Tests and coverage | Vitest 5.1.1 with Testing Library; `@vitest/coverage-v8` 5.1.1 | Vitest; coverage as a report, not a gate |
 
-**Recommendation.** One command, `npm run check` (`types:check`, then `tsc -b`, `oxlint --type-aware`, `prettier --check .` and `vitest run`), which must pass before a UI change is done, like the Python check.
-
-Measured once in Step 9 (2026-11-21, Apple M4 Pro, Node 25.1.0), on a scratch copy of the real UI with one file of six planted bugs. ESLint and its plugins were installed only in that copy, so this table isn't reproducible from the repo:
+Linters compared once (2026-11-21, Apple M4 Pro, Node 25.1.0) on a scratch copy of the real UI with one file of six planted bugs. ESLint and its plugins were installed only in that copy, so this table isn't reproducible from the repo:
 
 | Planted bug | oxlint 1.94.0, template config | oxlint `--type-aware` (oxlint-tsgolint 7.0.2007), six rules enabled | ESLint 10.15.0, typescript-eslint 8.73.0 `recommendedTypeChecked`, react-hooks 7.1.1 |
 | --- | --- | --- | --- |
@@ -408,9 +399,9 @@ Measured once in Step 9 (2026-11-21, Apple M4 Pro, Node 25.1.0), on a scratch co
 | Async function passed as `onClick` | No | Yes | Yes |
 | Unchecked `any` | No | Yes | Yes |
 
-On the real UI code, ESLint and the configured oxlint found the same two real bugs (an async `onSubmit` handler, and the stream's `done` callback returning a promise), both fixed; ESLint also flagged one async test helper without `await`. The template's oxlint has the type-aware rules but doesn't enable them, which is why it reported nothing on the D19 planted file.
+The template's oxlint has the type-aware rules but doesn't enable them, so it misses the promise and `any` bugs. On the real UI code, ESLint and the configured oxlint found the same two real bugs (an async `onSubmit` handler, and the stream's `done` callback returning a promise), both fixed; ESLint also flagged one async test helper without `await`.
 
-**Recommendation, revised.** oxlint only, run as `oxlint --type-aware` with `no-floating-promises`, `await-thenable`, `no-misused-promises`, `no-unsafe-assignment`, `no-unsafe-member-access` and `no-explicit-any` enabled. It matched ESLint on every planted bug, so a second linter adds nothing measured.
+**Recommendation.** One command, `npm run check` (`types:check`, then `tsc -b`, `oxlint --type-aware`, `prettier --check .` and `vitest run`), which must pass before a UI change is done, like the Python check. oxlint is the only linter, run with `no-floating-promises`, `await-thenable`, `no-misused-promises`, `no-unsafe-assignment`, `no-unsafe-member-access` and `no-explicit-any` enabled. It matched ESLint on every planted bug, so a second linter adds nothing measured.
 
 **Confidence: High (85%).** Measured on six kinds of bug and the real code.
 
@@ -422,39 +413,17 @@ Measured on 2026-11-20 (Apple M4 Pro, Python 3.12.12, Pydantic 2.14.4, best of f
 | --- | --- | --- |
 | Dataclasses in the core, Pydantic in the API | No | Smallest code; one mirror type (`ProgressView`) because Pydantic doesn't serialise a dataclass property |
 | Dataclasses everywhere | Yes | FastAPI accepts dataclasses as request bodies and responses ([Using Dataclasses](https://fastapi.tiangolo.com/advanced/dataclasses/)), but warns they "can't do everything Pydantic models can do" |
-| **Pydantic everywhere** | Yes | `gap` becomes a computed field, so the mirror type goes away and the OpenAPI schema carries it; values from Gurobi's callbacks, which gurobipy types as `Any`, are checked at runtime |
+| **Pydantic everywhere** | Yes | `gap` is a computed field, so no mirror type is needed and the OpenAPI schema carries it; values from Gurobi's callbacks, which gurobipy types as `Any`, are checked at runtime |
 
-Measured with Pydantic 2.14.4: in its default (lax) mode, `Task(id="3", start="360", end=400.0)` is silently converted, so the repo's models are **strict** (`ConfigDict(frozen=True, strict=True)`): a string for an int, a float for an int or a bool for an int is refused, while an int is accepted for a float. Neither mode checks domain rules: `Task(id=0, start=400, end=360)` is accepted. `model_copy(update=...)` doesn't validate, so a copy is used only for trusted updates. mypy reports `prop-decorator` for `@computed_field` on a property, so that line carries a targeted ignore. `BaseModel` takes keyword arguments only, so all 77 constructor calls were rewritten.
+Measured with Pydantic 2.14.4: in its default (lax) mode, `Task(id="3", start="360", end=400.0)` is silently converted, so the repo's models are **strict** (`ConfigDict(frozen=True, strict=True)`): a string for an int, a float for an int or a bool for an int is refused, while an int is accepted for a float. Neither mode checks domain rules: `Task(id=0, start=400, end=360)` is accepted. `model_copy(update=...)` doesn't validate, so a copy is used only for trusted updates. mypy reports `prop-decorator` for `@computed_field` on a property, so that line carries a targeted ignore.
 
-**Recommendation.** Pydantic everywhere, with one shared strict, frozen config (decided by the owner). After the change the full check passed unchanged (161 tests), and the 40-task exposed solve still took 32,424 nodes and 3.170548 work units.
+**Recommendation.** Pydantic everywhere, with one shared strict, frozen config (decided by the owner). With it, the full check passed (161 tests), and the 40-task exposed solve took 32,424 nodes and 3.170548 work units.
 
 **Confidence: High (85%)** that it works as described: measured and tested here. The trade-off against dataclasses was close; the choice ties the core's types to Pydantic's major versions.
 
-## 24. Setup and start scripts
+## 24. The app in Docker for local development
 
-**Superseded by decision 25:** Docker Compose runs the app, so the scripts are gone. The faster healthcheck below still applies to the stack.
-
-One command to install everything (Python packages, UI packages, the `grafana/otel-lgtm` image) and one to start everything (the stack, a UI build, the app with telemetry) and open the UI. Single developer, macOS, local only.
-
-| Option | Needs | Pros | Cons |
-| --- | --- | --- | --- |
-| **Two bash scripts, `scripts/setup.sh` and `scripts/start.sh`** | bash (macOS ships 3.2), curl | Nothing to install; plain commands anyone can read; with `exec`, Ctrl-C reaches the server with no shell left in between | No native Windows (WSL works) |
-| Makefile targets | `make`, on macOS from the Xcode command line tools | Familiar `make setup` | Tab-sensitive syntax; a long-running foreground server and a background browser-opener are awkward in recipes |
-| `just` or Task (`justfile`, `Taskfile.yml`) | Another tool to install | Nicer syntax than make | A dependency to run the dependency installer |
-| `ground-ops setup` and `ground-ops start` subcommands | uv | Cross-platform Python | Puts Docker and npm orchestration in the package, which only solves and serves (single responsibility); setup can't install uv itself anyway |
-| Root `package.json` scripts | Node | `npm run start` | Makes Node the entry point for a Python project; Node is meant only for the UI |
-| A Procfile with honcho or overmind | Another tool | Runs several processes with merged logs | There is only one long-running process on the host; the stack runs in Docker |
-| The app in Docker Compose too | Docker | One `docker compose up` | Ruled out by AGENTS.md: no container for the app |
-
-**Readiness.** `docker compose up --wait` waits until services are "running|healthy" and implies detached mode ([compose up](https://docs.docker.com/reference/cli/docker/compose/up/)). The image's own healthcheck checks Grafana, Loki, Tempo, Prometheus and the collector, but only every 30 s, so `--wait` took 31 and 32 s from cold. A Compose `healthcheck` with `start_period: 2m` and `start_interval: 1s` keeps the image's test and interval but checks every second while starting: 8, 12 and 7 s over three cold starts. Compose "can override the values set in the Dockerfile" ([Compose spec: healthcheck](https://github.com/compose-spec/compose-spec/blob/main/workload_spec.md)); the merged container config kept the image's test command and 30 s interval. `start_interval` "requires Docker Engine version 25.0 or later" ([Dockerfile: HEALTHCHECK](https://docs.docker.com/reference/dockerfile/)).
-
-**Recommendation.** Bash scripts. `setup.sh` checks for uv, npm and a running Docker, then runs `uv sync`, `npm ci` (installs exactly the lockfile) and `docker compose pull`. `start.sh` refuses to start if port 8000 is taken or the UI's packages are missing, runs `docker compose up --wait`, builds the UI, opens the browser once the app answers, and `exec`s `ground-ops serve` with `OTEL_EXPORTER_OTLP_ENDPOINT` set. The stack keeps running after Ctrl-C, so finished runs stay in Grafana. `stop.sh` stops the `ground-ops serve` process by name, not whatever holds port 8000, then runs `docker compose down`.
-
-**Confidence: High (90%).** Measured on 2026-11-21 on the machine in [experiments.md](experiments.md), under macOS's bash 3.2, from a fresh clone: setup succeeded; with the stack stopped, `start.sh` opened the browser after 25 s; a run was exported and its `run_id` reached Prometheus; a second `start.sh` was refused; Ctrl-C stopped the app; `stop.sh` after a start shut the app down cleanly and removed the stack, and with nothing running said so and exited 0; `start.sh` before setup said to run setup; setup with Docker unreachable (`DOCKER_HOST` pointed at a missing socket) or uv not on the `PATH` named what was missing. ShellCheck reports nothing. Not tested: Linux (`xdg-open`), and setup on a machine with nothing cached (the fresh-clone setup took 4 s because uv, npm and Docker had everything cached).
-
-## 25. The app in Docker for local development
-
-Decided by the owner: run the API and the UI in Docker Compose next to the stack, with the source bind-mounted, the API reloading on change and Vite in dev mode, so `docker compose up --wait` starts everything and `docker compose down` stops it. Measured on 2026-11-21 on the machine in [experiments.md](experiments.md) (Docker Desktop, Engine 28.4.0, default file sharing).
+Decided by the owner: run the API and the UI in Docker Compose next to the stack, with the source bind-mounted, the API reloading on change and Vite in dev mode, so `docker compose up --wait` starts everything and `docker compose down` stops it. The CLI and the tests run on the host. Measured on 2026-11-21 on the machine in [experiments.md](experiments.md) (Docker Desktop, Engine 28.4.0, default file sharing).
 
 | Check | Result |
 | --- | --- |
@@ -465,20 +434,19 @@ Decided by the owner: run the API and the UI in Docker Compose next to the stack
 | UI: Vite in the container, a browser connected, edits to a heading | With `server.watch.usePolling`, 3 of 5 edits never reached the browser in 20 s. With Vite's default (inotify), all 18 edits over three runs arrived, the slowest after 10.9 s; a second time, again 18 of 18, after 0.18 to 4.80 s. In between, six runs on Node 24, 25 and 26 missed 12 of 36 edits within 20 s; the cause was not found (the Mac did not sleep) |
 | The same with Vite on the host | All five: 13.8 s for the first, then 0.07 to 1.28 s |
 | `up --wait`, images cached | 28 s with empty volumes (installing the Python and npm packages), 10 s after |
-| `npm ci` on Linux | Failed: the lockfile made on macOS lacked two optional packages Linux needs; regenerated so it installs on both |
+| `npm ci` on Linux | A lockfile made on macOS lacked two optional packages Linux needs; the lockfile is generated so it installs on both |
 
-Two measuring methods gave misleading results and were dropped: fetching a module from Vite over HTTP, and Vite's `hmr` debug log, both of which missed changes even with Vite on the host. Only a connected browser counts.
+Only a connected browser counts as a measurement of UI updates: fetching a module from Vite over HTTP, and Vite's `hmr` debug log, both missed changes even with Vite on the host.
 
 **How it's set up.**
 - **API:** the `uv` image runs `uvicorn ground_ops.api:app_from_environment --factory --reload`. The factory flushes telemetry when the app stops, and the environment lives in a volume (`/venv`), apart from the host's `.venv`. `--timeout-graceful-shutdown 1` stops a reload from waiting for open event streams: with a run page's stream open, a reload waited 6.4 s, until the run ended; with the timeout, 1.8 s, closing the stream. Every published port, the stack's included, is on `127.0.0.1` only.
 - **UI:** the `node` image (Node 24, the maintained LTS line; Node 25 reached end of life on 2026-06-01 per [Node's release schedule](https://github.com/nodejs/Release/blob/main/schedule.json)) runs `npm ci` and then `vite --host 0.0.0.0`. `node_modules` lives in a volume, because the host's holds macOS builds of native packages, and Vite's proxy points at the `api` service.
-- **Readiness:** each service has a healthcheck with `start_interval: 1s`, and each depends on the one before being healthy, so `up --wait` returns when the UI answers.
-- **Removed:** `ground-ops serve`, `add_ui`, the UI's production build and the scripts.
+- **Readiness:** `docker compose up --wait` waits until services are "running|healthy" and implies detached mode ([compose up](https://docs.docker.com/reference/cli/docker/compose/up/)). Each service has a healthcheck with `start_interval: 1s`, and each depends on the one before being healthy, so `up --wait` returns when the UI answers. The `grafana/otel-lgtm` image's own healthcheck checks Grafana, Loki, Tempo, Prometheus and the collector, but only every 30 s, so `--wait` took 31 and 32 s from cold. A Compose `healthcheck` with `start_period: 2m` and `start_interval: 1s` keeps the image's test and interval but checks every second while starting: 8, 12 and 7 s over three cold starts. Compose "can override the values set in the Dockerfile" ([Compose spec: healthcheck](https://github.com/compose-spec/compose-spec/blob/main/workload_spec.md)); the merged container config kept the image's test command and 30 s interval. `start_interval` "requires Docker Engine version 25.0 or later" ([Dockerfile: HEALTHCHECK](https://docs.docker.com/reference/dockerfile/)).
 
 **Costs.**
 - Solves from the UI run on Linux, so their search can differ from the numbers in the README and in the experiments, which come from the CLI on macOS.
 - UI updates are a little slower and more variable than with Vite on the host.
-- A runtime reload of the API forgets the runs in memory.
+- A reload of the API forgets the runs in memory.
 - Gurobi's free licence says "non-production use only", and nothing here is a production setup.
 
 **Confidence: Medium (70%)** that the setup works as described. The API reloaded on every edit measured, but UI changes sometimes reached the browser late or not within 20 s, for a reason not found. It's measured on one machine; Linux hosts and other Docker Desktop file-sharing settings weren't tried.

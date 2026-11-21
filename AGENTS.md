@@ -1,6 +1,6 @@
 # Agent instructions: gurobi-ground-ops
 
-A small public repo for learning Gurobi (MIP solver) on airport ground-operations problems: handler→task assignment and shift-coverage set covering. The models are textbook. The real deliverable is what surrounds the solve: solver telemetry, deterministic tests, effort limits, warm starts and infeasibility diagnosis. The repo has four parts: the core library (models, solve, telemetry), an LGTM observability stack, a FastAPI service with SSE progress, and a React UI. Docker Compose runs the stack, the API and the UI for local development (D25). The core library never imports the API or UI, and its tests need none of the other parts.
+A small public repo for learning Gurobi (MIP solver) on airport ground-operations problems: handler→task assignment and shift-coverage set covering. The models are textbook. What matters is what surrounds the solve: solver telemetry, deterministic tests, effort limits, warm starts and infeasibility diagnosis. The repo has four parts: the core library (models, solve, telemetry), an LGTM observability stack, a FastAPI service with SSE progress, and a React UI. Docker Compose runs the stack, the API and the UI for local development (D24); the CLI and the tests run on the host. The core library never imports the API or UI, and its tests need none of the other parts.
 
 The owner is a backend/platform engineer, **not an optimisation modeller**. Nothing in the repo may suggest otherwise.
 
@@ -17,7 +17,7 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 ## Do NOT build
 
 - No job queue, database, authentication or multi-user state. Runs live in memory and are lost on restart.
-- No production image or deployment. Docker Compose is for local development only: it runs the stack, the API and the UI with the source mounted (D25). The CLI and the tests run on the host.
+- No production image or deployment. Docker Compose is for local development only: it runs the stack, the API and the UI with the source mounted (D24).
 - No Kubernetes, CI/CD or cloud deployment (single developer, local only).
 - No WebSockets. Progress is pushed over SSE; everything else is plain requests.
 - No notebooks, and no Sudoku, N-queens or puzzle demos.
@@ -28,9 +28,9 @@ The owner is a backend/platform engineer, **not an optimisation modeller**. Noth
 - `uv` for dependencies and for running everything. Never `pip install`.
 - Python 3.12+. Type hints on all function signatures, enforced by ruff's `ANN` rules and `mypy --strict`. gurobipy ships type stubs, but `setParam` values aren't type-checked, so parameter names and values need tests.
 - One package in a src layout (`src/ground_ops/`), with tests in `tests/`. No sub-packages unless a file exceeds ~500 lines. Reproducible experiment scripts live in a top-level `experiments/` directory, outside the package.
-- Project docs live in `docs/`: `domain.md` for the glossary and simplifications, `reading-the-log.md` for an annotated real Gurobi log, `experiments.md` for measured results with their scripts and machine, `related-work.md` for existing projects and literature, `quality-lenses.md` for the checks every feature must pass, `plan.md` for what to build and when each step is done, `design-decisions.md` for decisions with their evidence and confidence, plus design docs as they're written.
+- Project docs live in `docs/`: `domain.md` for the glossary and simplifications, `reading-the-log.md` for annotated real Gurobi logs, `experiments.md` for measured results with their scripts and machine, `related-work.md` for existing projects and literature, `quality-lenses.md` for the checks every feature must pass, `plan.md` for what each step builds and when it's done, and `design-decisions.md` for decisions with their evidence and confidence.
 - The UI lives in `ui/`: React, Vite and strict TypeScript, managed with `npm`, tested with Vitest and Testing Library, linted with oxlint in type-aware mode, formatted with Prettier. `npm run check` in `ui/` must pass before a UI change is done (D22). On the host, Node is needed only for the UI's checks and editor support; Docker runs the dev server. TypeScript types for API payloads are generated from FastAPI's OpenAPI schema into `src/api.gen.ts` (`npm run types`), not written by hand; the check fails when they're out of date. TypeScript stays on 5.x while openapi-typescript needs it (D20).
-- The API lives under `/api` and is reachable from `127.0.0.1` only: in Compose its port is published on `127.0.0.1`. A streaming endpoint checks that the run exists before it starts streaming.
+- The API lives under `/api` and is reachable from `127.0.0.1` only: Compose publishes its port on `127.0.0.1`. A streaming endpoint checks that the run exists before it starts streaming.
 - MIT licence.
 
 ## How to write code
@@ -112,7 +112,7 @@ Build one module at a time. (These are the steps for each change, not the projec
 
 1. Write the simplest version that meets the requirement.
 2. Fix lint and formatting: `uv run ruff check --fix . && uv run ruff format .`
-3. Run the full check, which must pass before a change is done: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`. The ruff rule set and mypy's strict mode are configured in `pyproject.toml`; don't loosen them to make a change pass. From Step 2 on, read the coverage report for untested branches; coverage is a signal, not a target.
+3. Run the full check, which must pass before a change is done: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`. The ruff rule set and mypy's strict mode are configured in `pyproject.toml`; don't loosen them to make a change pass. Read the coverage report for untested branches; coverage is a signal, not a target.
 4. Run the changed code directly (`uv run python -c "..."` or a throwaway script), covering the normal case and the edges: an empty instance, one handler with one task, zero demand, an infeasible instance, an effort limit too small to prove optimality. Look for what the tests miss: a wrong branch, an off-by-one at a time-slot boundary, a silent `None` or NaN, a raw solver exception leaking out. If code can't be exercised without heavy setup, say so instead of guessing.
 5. Check the feature against the lenses in `docs/quality-lenses.md` that apply to it.
 6. Reread the diff and remove anything the task didn't require.

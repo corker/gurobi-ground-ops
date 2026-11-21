@@ -4,7 +4,7 @@ Check each feature through the lenses that apply to it before calling it done. W
 
 ## Lenses that apply
 
-Apply the first group to every feature, then the groups that match what the feature touches. Several lenses point to rules in [AGENTS.md](../AGENTS.md) rather than repeating them.
+Apply the first group to every feature, then the groups that match what the feature touches. Several lenses point to rules in [AGENTS.md](../AGENTS.md) instead of repeating them.
 
 ### Every feature
 
@@ -12,7 +12,7 @@ Apply the first group to every feature, then the groups that match what the feat
 | --- | --- | --- | --- |
 | 1 | **Correctness** | Does the solution satisfy every constraint, and does the objective match a golden value? Is feasibility checked by repo code that doesn't trust the solver, at an explicit tolerance? Gurobi accepts violations up to `FeasibilityTol`, which defaults to 1e-6. | ISO: functional suitability |
 | 2 | **Failure modes** | Is every solver status handled on purpose: optimal, limit reached with or without an incumbent, infeasible, unbounded? Is "feasible but not proven optimal" a normal result with its gap? What happens with no licence or no collector? Each case should give a clear result or a readable message, never a raw traceback. | ISO: reliability; repo purpose |
-| 3 | **Reproducibility** | Same inputs, same machine, same Gurobi version: same result? Are the solver settings and build order in AGENTS.md: Tests followed, and is `uv.lock` committed? | [Gurobi determinism article](https://support.gurobi.com/hc/en-us/articles/360031636051); [uv docs](https://docs.astral.sh/uv/concepts/projects/layout/) |
+| 3 | **Reproducibility** | Same inputs, same machine, same Gurobi version: same result? Does it follow the solver settings and build order in AGENTS.md: Tests, and is `uv.lock` committed? | [Gurobi determinism article](https://support.gurobi.com/hc/en-us/articles/360031636051); [uv docs](https://docs.astral.sh/uv/concepts/projects/layout/) |
 | 4 | **Code quality** | Is it the simplest version that meets the requirement, in scope, readable top to bottom, with one reason to change per module and no duplicate abstractions? See AGENTS.md: How to write code, Do NOT build. | ISO: maintainability; Google: design, complexity, naming |
 | 5 | **Tests** | Does every behaviour have a test that asserts on behaviour, at the right level, deterministically? See AGENTS.md: Tests. | ISO: testability; Google: tests |
 | 6 | **Installability** | Does `uv sync && uv run pytest` work on a clean machine with no licence, no collector, no network, no Docker and no Node? | ISO: flexibility (installability); AGH's CPLEX dependency |
@@ -41,24 +41,24 @@ Apply the first group to every feature, then the groups that match what the feat
 | --- | --- | --- | --- |
 | 15 | **API contract** | Does every solver status (optimal, limit reached, infeasible, interrupted) map to exactly one API status that the UI handles? Does a missing run return 404 before any stream starts? Are the TypeScript types generated from the OpenAPI schema? | Repo purpose; D17, D20 |
 | 16 | **Concurrency safety** | Does each run get its own Gurobi environment, created and freed under one lock (D17)? Is shared state (the run table, the samples) guarded? Can a cancel race with a run that has just finished? | [Gurobi race conditions](https://support.gurobi.com/hc/en-us/articles/40912136522129); Google: parallel programming |
-| 17 | **Input safety** | Is every request validated, and is an instance over the free-licence size rejected before it's built? Is the API reachable from `127.0.0.1` only (its port published on `127.0.0.1` in Compose)? | ISO: security |
+| 17 | **Input safety** | Is every request validated, and is an instance over the free-licence size rejected before it's built? Is the API reachable from `127.0.0.1` only (Compose publishes its port on `127.0.0.1`)? | ISO: security |
 | 18 | **Solution inspection** | Can a non-modeller judge from the views alone whether the answer makes operational sense: who works when, where the overtime comes from, which tasks and handlers clash? | Repo purpose: formulation vs operational questions |
 | 19 | **Basic accessibility** | Semantic HTML, keyboard-reachable controls, readable contrast, and charts with a text label? | ISO: interaction capability (inclusivity) |
 
 ## Considered and out of scope
 
-These lenses matter in related work, but not for this repo's purpose. If the scope changes, move the affected lens into the table above.
+These lenses matter in related work, but not for this repo's purpose. If the scope changes, move the lens into the tables above.
 
 | Lens | Where it matters | Why it's out here |
 | --- | --- | --- |
-| Rich operational constraints (qualifications, breaks, teams, labour rules) | Tian, Kiermaier, Dall'Olio, commercial suites | The models stay textbook on purpose. Their absence must be stated in the README, not hidden. |
+| Rich operational constraints (qualifications, breaks, teams, labour rules) | Tian, Kiermaier, Dall'Olio, commercial suites | The models stay textbook. The README must state what's left out. |
 | Solution stability under re-planning (how much a re-solve changes the schedule) | Commercial suites, disruption-management papers | Warm start measures solve time, not schedule change. Not requested. |
 | Fairness and preferences | Gurobi workforce examples, optimods | Single objective, chosen and documented. |
 | Scale (hundreds of flights, decomposition, learned search) | AGH, branch-and-price papers | Instances must fit the free licence. |
 | Uncertainty (stochastic demand, delays) | Disruption-management literature | Deterministic textbook models only. |
 | Safety | ISO: safety | Synthetic data that drives no real people or equipment. |
 | Availability, scalability of a service | ISO: reliability, flexibility | Local, single-user, run on demand. Runs are lost on restart. |
-| Solver independence (running the same suite on a second solver) | Research code tied to one commercial solver | Gurobi only, by choice (D5). The pip package's bundled licence already lets anyone run the tests. |
+| Solver independence (running the same suite on a second solver) | Research code tied to one commercial solver | Gurobi only, by choice (D5). The pip package's bundled licence lets anyone run the tests. |
 | Authentication and multi-user state | ISO: security | Reachable from `127.0.0.1` only; one user. |
 | Privacy | ISO: security | No personal data. Generated IDs only, never real names. |
 | Cost, sustainability, internationalisation | Common architecture frameworks | No hosted infrastructure, no spend, English only. |
@@ -82,4 +82,4 @@ These lenses matter in related work, but not for this repo's purpose. If the sco
 | gurobi-logtools, CP-SAT-Log-Analyzer | Reading solver progress after the fact | Live metrics, integration with an observability stack | Contrast: live metrics during the solve instead of parsing logs afterwards |
 | Commercial suite (INFORM GroundStar) | Operational fit: real-time re-planning, real labour rules | Everything is closed, so solver behaviour can't be inspected | Motivates warm start as a re-planning edge |
 
-The gap across all of them is the same one: no project treats solve behaviour (status, gap, bound, reproducibility, diagnosis) as something to observe and test.
+What they all miss: no project treats solve behaviour (status, gap, bound, reproducibility, diagnosis) as something to observe and test.

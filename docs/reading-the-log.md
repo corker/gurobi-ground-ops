@@ -1,6 +1,6 @@
 # Reading a Gurobi log
 
-Two real logs of the same Model 1 instance (40 tasks, seed 1), annotated line by line. One uses Gurobi's default settings; the other turns off presolve and cuts so the search is visible. Both were produced on 2026-11-20 by gurobipy 14.0.0 on an Apple M4 Pro with one thread:
+Two real logs of the same Model 1 instance (40 tasks, seed 1), annotated. One uses Gurobi's default settings; the other turns off presolve and cuts so the search is visible. Both were produced on 2026-11-20 by gurobipy 14.0.0 on an Apple M4 Pro with one thread:
 
 ```sh
 uv run ground-ops solve --tasks 40 --seed 1 --expose-search --log exposed.log
@@ -37,7 +37,7 @@ Threads  1
 ```
 
 - **`Restricted license … expires 2028-11-29`:** the free licence bundled with gurobipy is in use, not a full one. Any log without this line came from a different licence.
-- **`Non-default parameters`:** the first place to look when two runs of "the same model" behave differently. Here: one thread (for reproducibility), presolve and cuts off (to expose the search), one log line a second.
+- **`Non-default parameters`:** check these first when two runs of "the same model" behave differently. Here: one thread (for reproducibility), presolve and cuts off (to expose the search), one log line a second.
 
 ### The model as Gurobi sees it
 
@@ -55,7 +55,7 @@ Coefficient statistics:
 
 - **Rows are constraints, columns are variables.** 280 columns are the 7 handlers × 40 tasks; 593 rows are 40 `cover` constraints plus 553 `no_overlap` constraints (79 conflicting task pairs × 7 handlers). Both are well under the free limit of 2,000.
 - **`Model fingerprint`:** a hash of the model. If two runs show the same fingerprint, they solved the same model; if their results differ, look at the parameters or the machine.
-- **`Coefficient statistics`:** every range is small (1 to 20), so there's no numerical risk here. Ranges spanning many orders of magnitude would be a warning sign.
+- **`Coefficient statistics`:** every range is small (1 to 20), so there's no numerical risk here. Ranges that span many orders of magnitude are a warning sign.
 
 ### Before the search
 
@@ -98,7 +98,7 @@ H    0     0                      30.0000000    0.00000   100%     -    0s
 | `It/Node`, `Time` | Average simplex iterations per node, and elapsed wall-clock time |
 
 - **`H` at the start of a line** means a heuristic found a new incumbent; **`*`** means one was found by branching. Here, an `H` line at the root brings the incumbent from 189 to 30, and it never changes again.
-- **Read the two bound columns separately.** The incumbent is fine from the second line on. Everything after that is the bound climbing (0, then 23, 26, 27, finally 30) while the gap shrinks from 100% to 0. This is the "bound won't move" problem from the README, solved by brute force: 32,424 nodes to prove an answer found in the first fraction of a second.
+- **Read the two bound columns separately.** The incumbent is final from the second line on. After that, only the bound climbs (0, then 23, 26, 27, finally 30) while the gap shrinks from 100% to 0. This is the "bound won't move" problem from the README, solved by brute force: 32,424 nodes to prove an answer found in the first fraction of a second.
 
 ### The summary
 
@@ -149,8 +149,8 @@ Explored 1 nodes (29 simplex iterations) in 0.01 seconds (0.00 work units)
 - **`Root relaxation: objective 30`:** on the presolved model, the LP relaxation already gives the optimum. The bound starts where it needs to end, so no branching is needed.
 - **`*` on the only node line:** the root LP solution itself was a whole-number schedule, so the first branch-and-bound node produced the optimal incumbent and the gap closed at once.
 
-The two logs show the same lesson from both sides: how hard a MIP is depends as much on how tight its bound is as on its size. Presolve turned a weak formulation into a tight one here; with presolve off, the search had to make up the difference node by node.
+Together, the two logs show that how hard a MIP is depends as much on how tight its bound is as on its size. Here presolve turned a weak formulation into a tight one; with presolve off, the search made up the difference node by node.
 
 ## What the telemetry adds to the log
 
-The `groundops.solver.*` metrics carry the same numbers as the node table, recorded at every callback and exported once a second (the OpenTelemetry SDK's own default is once a minute), and labelled by `run_id` so runs can be compared in Grafana. One difference matters: Gurobi's progress callback can run for the last time before the final bound and incumbent are known (in this repo it reported a final bound of 0 when the true bound was 8). So the telemetry always takes its last sample from the model's final attributes, which match the log's `Best objective … best bound` line.
+The `groundops.solver.*` metrics carry the same numbers as the node table. They're recorded at every callback, exported once a second (the OpenTelemetry SDK's default is once a minute), and labelled by `run_id` so runs can be compared in Grafana. One difference matters: Gurobi's last progress callback can run before the final bound and incumbent are known. In one run here, the last callback reported a bound of 0 when the true bound was 8. So the telemetry takes its last sample from the model's final attributes, which match the log's `Best objective … best bound` line.

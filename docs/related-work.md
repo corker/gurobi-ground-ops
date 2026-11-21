@@ -4,13 +4,13 @@ As of 2026-11-20.
 
 ## Summary
 
-No public project found combines the three things this repo is built around: airport ground-ops models, live solver telemetry, and tested operational edges (effort limits, warm starts, IIS, determinism). Each part exists somewhere, but separately.
+No public project found combines the three parts of this repo: airport ground-ops models, live solver telemetry, and tested operational edges (effort limits, warm starts, IIS, determinism). Each part exists somewhere, but separately.
 
 - **The models exist.** Academic papers formulate ground-staff task assignment and shift covering, but rarely publish code. Gurobi publishes workforce scheduling examples, but as notebooks without tests.
 - **Telemetry exists only after the solve.** Gurobi's gurobi-logtools parses log files once the solve is over. No project was found that streams callback metrics such as gap, bound and incumbent to OpenTelemetry or Prometheus while the solve runs.
 - **The commercial suite checked is closed source.** It shows the problem is real, but offers nothing to learn solver behaviour from.
 
-These are references, not competitors. The repo is for learning, so the useful questions are what to read, what to check the models against, and which part no project found here covers: live telemetry.
+The repo is for learning, so this page answers three questions: what to read, what to check the models against, and which part no project found covers (live telemetry).
 
 ## Scope
 
@@ -20,7 +20,7 @@ Paper details come from open abstracts where available, otherwise from titles an
 
 ## Airport ground-ops optimisation
 
-The academic literature is rich, but public code is thin. The repos found are research code, a single dataset, or tiny projects with no traction.
+There are many papers but little public code. The repos found are research code, a single dataset, or tiny projects with few or no stars.
 
 ### Open-source repos
 
@@ -49,7 +49,7 @@ The problem descriptions for Tian and for the 2026 review come from their abstra
 
 ## Gurobi learning material
 
-Gurobi's own material is the closest neighbour for the models, but it is notebook-first, and the formulation is the whole point. Telemetry, time-limit behaviour and reproducibility tests aren't its focus.
+Gurobi's own material is closest to the models here, but it is mostly notebooks about the formulation. Telemetry, time-limit behaviour and reproducibility tests aren't its focus.
 
 | Resource | What it covers | Version / activity | Licence |
 | --- | --- | --- | --- |
@@ -61,7 +61,7 @@ The optimods workforce mod is related to Model 2, but it is a different problem:
 
 ## Workforce scheduling and rostering tools
 
-General-purpose solvers ship ready-made examples of both model shapes. This repo uses Gurobi only; [design-decisions.md](design-decisions.md) (D5) records how HiGHS, CP-SAT and PuLP compared before that decision.
+General-purpose solvers ship ready-made examples of both model shapes. This repo uses Gurobi only; [design-decisions.md](design-decisions.md) (D5) compares HiGHS, CP-SAT and PuLP.
 
 | Tool | Relevant examples | Version (PyPI) | Licence |
 | --- | --- | --- | --- |
@@ -71,7 +71,7 @@ General-purpose solvers ship ready-made examples of both model shapes. This repo
 | [PuLP](https://github.com/coin-or/pulp) (2.5k stars) | Modelling layer over CBC, HiGHS and other solvers; no airport examples | 4.3.1 (2026-11-19) | MIT on PyPI; GitHub lists NOASSERTION |
 | [Timefold quickstarts](https://github.com/TimefoldAI/timefold-quickstarts) (606 stars, pushed 2026-11-16) | `employee-scheduling`, `task-assigning` and `flight-crew-scheduling` use cases | Python `timefold` 1.24.0b0 (2025-07-08, beta) | Apache-2.0 |
 
-Timefold is the clearest contrast. It uses metaheuristics to produce good rosters quickly rather than to prove optimality, so it has no gap or bound to read.
+Timefold is the clearest contrast. It uses metaheuristics to find good rosters quickly, not to prove optimality, so it has no gap or bound to read.
 
 ## Solver telemetry and log analysis
 
@@ -92,7 +92,7 @@ Open question: Gurobi's commercial server products may show job progress in a UI
 
 ## Commercial ground-handling products
 
-The established vendor products are closed planning suites. They show that the problem matters in industry, but they offer no way to see or learn the solver behaviour inside them.
+Vendor products are closed planning suites. They show that the problem matters in industry, but you can't see or learn from the solver behaviour inside them.
 
 | Product | Scope (vendor-stated) | Source |
 | --- | --- | --- |
@@ -102,7 +102,7 @@ Only one vendor was checked. Others in this space weren't researched and aren't 
 
 ## Comparison and gaps
 
-Every neighbour focuses on the model, the data or the log after the fact. This repo is the only one found whose focus is what happens around the solve while it runs.
+Every project above focuses on the model, the data or the log after the solve. This repo is the only one found that focuses on what happens around the solve while it runs.
 
 | Project | Ground-ops domain | Solver | Focus | Format | Licence |
 | --- | --- | --- | --- | --- | --- |
@@ -119,7 +119,7 @@ Every neighbour focuses on the model, the data or the log after the fact. This r
 
 - **Check Model 1 against** [Tian et al. 2022](https://doi.org/10.1371/journal.pone.0279131), which is open access and closest in shape.
 - **Check Model 2 against** [Kiermaier, Frey, Bard 2020](https://doi.org/10.1007/s10951-019-00635-5) and the classic set-covering tour formulation it builds on.
-- **Cross-check telemetry against the solve itself:** the final values the callback emits should equal the model's final attributes. That gives a test that doesn't depend on wall-clock time, without parsing logs.
+- **Cross-check telemetry against the solve itself:** the last values the telemetry records should equal the model's final attributes. That gives a test that doesn't depend on wall-clock time or log parsing.
 - **For comparing solver logs**, the [CP-SAT Primer](https://github.com/d-krupke/cpsat-primer) explains how a non-LP solver reports its bound and progress.
 
 ## Sources
