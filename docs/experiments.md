@@ -138,6 +138,62 @@ uv run python experiments/infeasible_status.py
 
 **Finding:** always status 3, never 4 (`INF_OR_UNBD`), so the models handle only status 3. Three of the 2-task instances (seeds 6, 7 and 9) have a peak overlap of 1, so they're solved with no handlers at all.
 
-## Planned
+## Tied optimal solutions (D10)
 
-Still to come, from [plan.md](plan.md): pairwise versus clique no-overlap (D3, D15) and the number of tied optimal solutions (D10).
+How many different schedules share the optimal objective in Model 1. Gurobi's solution pool with `PoolSearchMode=2` searches for the `PoolSolutions` best solutions ([Gurobi: solution pool](https://docs.gurobi.com/projects/optimizer/en/current/features/solutionpool.html)), with `MIPGap=0` as those docs advise. When the worst stored solution is worse than the optimum, every optimal schedule is in the pool and the count is exact; otherwise the count is a lower bound. Measured on 2026-11-21.
+
+```sh
+uv run python experiments/tied_optima.py
+```
+
+```
+Model 1, default settings, PoolSearchMode=2, PoolSolutions=2000, MIPGap=0
+10 tasks, seed 1: optimum 0, optimal schedules 192
+10 tasks, seed 2: optimum 25, optimal schedules 108
+10 tasks, seed 3: optimum 9, optimal schedules at least 2000
+10 tasks, seed 4: optimum 50, optimal schedules 432
+10 tasks, seed 5: optimum 25, optimal schedules 486
+20 tasks, seed 1: optimum 0, optimal schedules at least 2000
+20 tasks, seed 2: optimum 56, optimal schedules at least 2000
+20 tasks, seed 3: optimum 0, optimal schedules at least 2000
+20 tasks, seed 4: optimum 41, optimal schedules at least 2000
+20 tasks, seed 5: optimum 99, optimal schedules at least 2000
+30 tasks, seed 1: optimum 8, optimal schedules at least 2000
+30 tasks, seed 2: optimum 119, optimal schedules at least 2000
+30 tasks, seed 3: optimum 0, optimal schedules at least 2000
+30 tasks, seed 4: optimum 56, optimal schedules at least 2000
+30 tasks, seed 5: optimum 62, optimal schedules at least 2000
+```
+
+A brute-force enumeration of every assignment of the four exact 10-task instances found the same counts: 192, 108, 432 and 486.
+
+**Finding:** every instance has more than a hundred optimal schedules, and from 20 tasks on, at least 2,000. So the schedule a solve returns is one of many equally good ones, which is why the tests assert the objective and feasibility, never a specific assignment.
+
+## Pairwise against clique no-overlap (D3, D15)
+
+Model 1's no-overlap rule written pairwise, as in the package, and as one constraint per handler and clique. Two tasks conflict when `[start, end + 10 min)` intervals overlap, so the tasks running at any task's start form a clique, and those cliques cover every conflicting pair. The script builds the clique form itself; the package keeps the pairwise form. The LP bound is from `Model.relax()`. Constraint counts include the one cover constraint per task. Measured on 2026-11-21.
+
+```sh
+uv run python experiments/clique_no_overlap.py
+```
+
+```
+Model 1, default settings; constraints include the cover constraints
+20 tasks, seed 1, 5 handlers: pairwise 145 constraints, LP bound 0, optimum 0; clique 95 constraints, LP bound 0, optimum 0
+20 tasks, seed 2, 5 handlers: pairwise 165 constraints, LP bound 40.5, optimum 56; clique 90 constraints, LP bound 56, optimum 56
+20 tasks, seed 3, 6 handlers: pairwise 158 constraints, LP bound 0, optimum 0; clique 86 constraints, LP bound 0, optimum 0
+20 tasks, seed 4, 5 handlers: pairwise 140 constraints, LP bound 31, optimum 41; clique 90 constraints, LP bound 41, optimum 41
+20 tasks, seed 5, 5 handlers: pairwise 115 constraints, LP bound 87, optimum 99; clique 80 constraints, LP bound 99, optimum 99
+30 tasks, seed 1, 6 handlers: pairwise 312 constraints, LP bound 0, optimum 8; clique 174 constraints, LP bound 8, optimum 8
+30 tasks, seed 2, 5 handlers: pairwise 255 constraints, LP bound 113.5, optimum 119; clique 155 constraints, LP bound 119, optimum 119
+30 tasks, seed 3, 6 handlers: pairwise 276 constraints, LP bound 0, optimum 0; clique 156 constraints, LP bound 0, optimum 0
+30 tasks, seed 4, 7 handlers: pairwise 436 constraints, LP bound 0, optimum 56; clique 191 constraints, LP bound 56, optimum 56
+30 tasks, seed 5, 5 handlers: pairwise 260 constraints, LP bound 37, optimum 62; clique 140 constraints, LP bound 62, optimum 62
+40 tasks, seed 1, 7 handlers: pairwise 593 constraints, LP bound 0, optimum 30; clique 264 constraints, LP bound 30, optimum 30
+40 tasks, seed 2, 5 handlers: pairwise 410 constraints, LP bound 71, optimum 84; clique 215 constraints, LP bound 84, optimum 84
+40 tasks, seed 3, 8 handlers: pairwise 712 constraints, LP bound 0, optimum 23; clique 264 constraints, LP bound 23, optimum 23
+40 tasks, seed 4, 8 handlers: pairwise 864 constraints, LP bound 0, optimum 103; clique 280 constraints, LP bound 103, optimum 103
+40 tasks, seed 5, 6 handlers: pairwise 454 constraints, LP bound 0, optimum 49; clique 238 constraints, LP bound 49, optimum 49
+```
+
+**Finding:** on all 15 instances the clique form's LP bound equals the optimum, while the pairwise LP bound is below it on all 12 instances with a non-zero optimum, and is 0 on half of those. The clique form needs 32% to 70% as many constraints. Both forms reach the same optimum. This held on every instance tried, but isn't proven in general.

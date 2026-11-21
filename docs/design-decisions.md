@@ -66,21 +66,20 @@ All measurements come from throwaway proof-of-concept scripts run on 2026-11-20.
 
 ## 3. Model 1 no-overlap constraints
 
-Measured on seeded instances with a uniform 10-minute gap between tasks:
+Measured with [`experiments/clique_no_overlap.py`](../experiments/clique_no_overlap.py) on 15 seeded instances of 20, 30 and 40 tasks ([experiments.md](experiments.md#pairwise-against-clique-no-overlap-d3-d15)). Two examples:
 
 | Instance | Pairwise: constraints / LP bound | Clique per time point: constraints / LP bound | Optimum |
 | --- | --- | --- | --- |
-| T=20, H=7 | 237 / 60 | 90 / 115 | 115 |
-| T=30, H=11 | 987 / 143 | 195 / 236 | 236 |
-| T=40, H=13 | 2,562, over the limit | 313 / 285 | 285 |
+| T=30, seed 4, H=7 | 436 / 0 | 191 / 56 | 56 |
+| T=40, seed 4, H=8 | 864 / 0 | 280 / 103 | 103 |
 
 | Option | Pros | Cons |
 | --- | --- | --- |
 | **Pairwise:** x[h,a] + x[h,b] ≤ 1 for each conflicting pair | The obvious textbook form; works with any conflict rule, including travel-dependent ones | Weak LP bound; constraint count grows with the square of the overlaps |
-| Clique per time point | LP bound equalled the optimum in every case; few constraints | Needs conflicts to form an interval graph, so no travel-dependent gaps; less obvious |
+| Clique per time point | LP bound equalled the optimum on all 15 instances; 32% to 70% as many constraints | Needs conflicts to form an interval graph, so no travel-dependent gaps; less obvious |
 | Time-indexed slots | Uniform with Model 2 | Many more variables; rounds the times |
 
-**Recommendation.** Pairwise in the package, because the plan asks for a textbook, obvious formulation. Run the clique form once as a recorded experiment (decision 14). It is the clearest demonstration in this repo of the formulation affecting the bound.
+**Recommendation.** Pairwise in the package, because the plan asks for a textbook, obvious formulation. The clique form is a recorded experiment (decision 14). It is the clearest demonstration in this repo of the formulation affecting the bound.
 
 **Confidence: High (85%).** The bounds are measured. The clique form's "LP equals optimum" result held on every instance tried, but wasn't proven in general.
 
@@ -194,7 +193,7 @@ Built in Step 6 for Model 1: an infeasible solve calls [`computeIIS`](https://do
 
 ## 10. Golden tests
 
-Measured: a T=20 instance has at least 50 different solutions with the optimal objective (100). That's the most the solution pool was allowed to store (`PoolSearchMode=2`, `PoolSolutions=50`).
+Measured with [`experiments/tied_optima.py`](../experiments/tied_optima.py) ([experiments.md](experiments.md#tied-optimal-solutions-d10)): every 10-task instance tried has between 108 and at least 2,000 optimal schedules, confirmed by brute force where exact, and every 20- and 30-task instance has at least 2,000.
 
 | Option | Robust? |
 | --- | --- |
@@ -258,7 +257,7 @@ The [turnaround dataset](https://github.com/spadrona/airport_ground_handling_dat
 
 ## 15. Where the bound comes from
 
-Measured on Model 1 (T=30): with only the cover constraints, the LP relaxation was integral. Adding the no-overlap constraints gave an LP bound of 15 against an optimum of 55, with 58 fractional variables. On decision 3's instances, which differ from this one (a uniform gap rather than travel-dependent gaps), the clique form closed that gap completely. Decision 4 shows presolve and cuts closing it inside the solver.
+With only the cover constraints, Model 1's LP relaxation is integral: each task takes its cheapest handler. The pairwise no-overlap constraints are what open the gap: at T=30 their LP bound is below the optimum on all four seeds with a non-zero optimum, for example 0 against 56 ([experiments.md](experiments.md#pairwise-against-clique-no-overlap-d3-d15)). The clique form (decision 3) closed that gap completely on every instance tried, and decision 4 shows presolve and cuts closing it inside the solver.
 
 **Recommendation.** Teach it through the log walkthrough and the experiment journal. No extra code is needed.
 
